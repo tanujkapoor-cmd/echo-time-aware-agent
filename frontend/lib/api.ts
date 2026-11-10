@@ -1,4 +1,4 @@
-import type { ChatReply, ChatRequest, Citation, Message, Session } from "./types";
+import type { Change, ChatReply, ChatRequest, Citation, Claim, Message, Session } from "./types";
 
 const root = "/api/v1";
 
@@ -69,7 +69,22 @@ export function isReply(value: unknown): value is ChatReply {
   const row = record(value);
   return typeof row?.message_id === "string" && typeof row.answer === "string"
     && row.answer.trim().length > 0 && typeof row.timestamp === "string"
-    && (row.citations === undefined || (Array.isArray(row.citations) && row.citations.every(isCitation)));
+    && (row.citations === undefined || (Array.isArray(row.citations) && row.citations.every(isCitation)))
+    && (row.changes === undefined || (Array.isArray(row.changes) && row.changes.every(isChange)));
+}
+
+function isClaim(value: unknown): value is Claim {
+  const row = record(value);
+  return typeof row?.value === "string" && typeof row.observed_at === "string" && typeof row.source_url === "string";
+}
+
+function isChange(value: unknown): value is Change {
+  const row = record(value);
+  return typeof row?.kind === "string"
+    && (row.subject == null || typeof row.subject === "string")
+    && (row.attribute == null || typeof row.attribute === "string")
+    && Array.isArray(row.previous) && row.previous.every(isClaim)
+    && Array.isArray(row.current) && row.current.every(isClaim);
 }
 
 export function isCitation(value: unknown): value is Citation {
