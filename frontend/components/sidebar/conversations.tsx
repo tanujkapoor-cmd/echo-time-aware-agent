@@ -1,6 +1,7 @@
 import { AudioLines, MessageSquare, Plus, X } from "lucide-react";
 import { formatTimestamp } from "../../lib/presentation";
 import type { Session } from "../../lib/types";
+import { ConversationMenu } from "./conversation-menu";
 
 interface Props {
   sessions: Session[];
@@ -8,12 +9,13 @@ interface Props {
   activeId?: string;
   busy: boolean;
   loading: boolean;
+  collapsed?: boolean;
   onNew: () => void;
   onSelect: (session: Session) => void;
   onClose?: () => void;
 }
 
-export function ConversationSidebar({ sessions, previews, activeId, busy, loading, onNew, onSelect, onClose }: Props) {
+export function ConversationSidebar({ sessions, previews, activeId, busy, loading, collapsed, onNew, onSelect, onClose }: Props) {
   return (
     <div className="conversation-sidebar">
       <div className="sidebar-brand">
@@ -28,13 +30,13 @@ export function ConversationSidebar({ sessions, previews, activeId, busy, loadin
           <Plus size={17} aria-hidden="true" /> <span>New Chat</span>
         </button>
       </div>
-      <nav aria-label="Conversations" className="history-nav">
+      <nav aria-label="Conversations" className="history-nav" inert={collapsed}>
         <h2 className="eyebrow history-label">Conversations</h2>
         {loading && <p role="status" className="sidebar-empty">Loading conversations…</p>}
         {!loading && !sessions.length && <p className="sidebar-empty">Your conversations will appear here.</p>}
         <ul className="conversation-list">
           {sessions.map(session => (
-            <li key={session.id}>
+            <li className="conversation-row" key={session.id}>
               <button
                 type="button"
                 className="conversation-link"
@@ -50,6 +52,8 @@ export function ConversationSidebar({ sessions, previews, activeId, busy, loadin
                     : <time className="conversation-preview" dateTime={session.created_at}>{formatTimestamp(session.created_at)}</time>}
                 </span>
               </button>
+              <ConversationMenu id={session.id} title={session.title ?? "Untitled conversation"}
+                disabled={busy} onOpen={() => onSelect(session)} />
             </li>
           ))}
         </ul>

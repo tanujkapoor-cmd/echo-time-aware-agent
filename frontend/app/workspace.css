@@ -315,7 +315,6 @@ a.citation-link:hover { border-color: var(--coral); }
   .sidebar-shell { display: block; overflow: hidden; border-right: 1px solid var(--line); }
   .desktop-conversations-toggle { display: inline-grid; }
   .workspace-bar .mobile-conversations-toggle, .mobile-echo { display: none; }
-  .echo-app[data-sidebar-open="false"] :is(.history-nav, .brand-name, .new-chat span, .sidebar-footer span:last-child) { display: none; }
   .echo-app[data-sidebar-open="false"] :is(.sidebar-brand, .sidebar-footer) { justify-content: center; }
   .echo-app[data-sidebar-open="false"] .sidebar-footer { margin-top: auto; }
 }

@@ -32,6 +32,7 @@ export function Chat() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [drawer, setDrawer] = useState<"conversations" | "inspector">();
+  const [conversationView, setConversationView] = useState(0);
   const closeDrawer = useCallback(() => setDrawer(undefined), []);
   const inspected = chat.messages.find(item => item.id === inspectedId)?.response
     ?? chat.messages.findLast(item => item.response)?.response ?? undefined;
@@ -42,11 +43,11 @@ export function Chat() {
     if (view && followBottom.current) view.scrollTop = view.scrollHeight;
   }, [chat.messages, chat.pending, chat.preview]);
 
-  function openConversation(session?: Session) {
+  async function openConversation(session?: Session) {
     followBottom.current = true;
     setInspectedId(undefined);
     closeDrawer();
-    void chat.openConversation(session);
+    if (await chat.openConversation(session)) setConversationView(previous => previous + 1);
   }
 
   function inspect(messageId: string) {
@@ -67,7 +68,9 @@ export function Chat() {
 
   return (
     <div className="echo-app" data-sidebar-open={sidebarOpen} data-inspector-open={inspectorOpen}>
-      <aside className="sidebar-shell" id="desktop-conversations"><ConversationSidebar {...sidebar} /></aside>
+      <aside className="sidebar-shell" id="desktop-conversations" data-collapsed={!sidebarOpen || undefined}>
+        <ConversationSidebar {...sidebar} collapsed={!sidebarOpen} />
+      </aside>
       <main className="workspace" data-welcome={welcoming || undefined}>
         <header className="workspace-bar">
           <div className="workspace-path">
@@ -92,7 +95,7 @@ export function Chat() {
             <PanelRight size={18} aria-hidden="true" /> <span>Inspector</span>
           </button>
         </header>
-        <div className="workspace-body">
+        <div className="workspace-body" key={conversationView}>
           <div className="transcript" ref={transcript} role="region" aria-label="Conversation messages" tabIndex={welcoming ? undefined : 0}
             onScroll={event => {
               const view = event.currentTarget;

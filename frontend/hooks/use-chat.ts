@@ -89,6 +89,7 @@ export function useChat() {
       setDraft("");
       retry.current = undefined;
       rememberSelection(selected.id);
+      return true;
     } catch (failure) {
       setError(errorText(failure));
     } finally {
