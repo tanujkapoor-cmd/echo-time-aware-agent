@@ -23,7 +23,8 @@ function Evidence({ label, claims }: { label: string; claims: Claim[] }) {
               <li key={index}>
                 <p className="comparison-value">{claim.value}</p>
                 <time dateTime={claim.observed_at}>{formatTimestamp(claim.observed_at)}</time>
-                {url && <a href={url} target="_blank" rel="noreferrer noopener">
+                {url && <a href={url} target="_blank" rel="noreferrer noopener"
+                  aria-label={label + " evidence for " + claim.value}>
                   Evidence <ArrowUpRight size={12} aria-hidden="true" />
                 </a>}
               </li>

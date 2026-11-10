@@ -108,7 +108,9 @@ export function AgentInspector({ reply, onClose, drawer }: {
             {reply.trace_id && <section className="inspector-section">
               <h3><Fingerprint size={15} aria-hidden="true" /> Trace ID</h3>
               <div className="trace-row">
-                <code title={reply.trace_id}>{reply.trace_id}</code>
+                <code title={reply.trace_id}>
+                  {reply.trace_id.length > 20 ? reply.trace_id.slice(0, 8) + "…" + reply.trace_id.slice(-6) : reply.trace_id}
+                </code>
                 <CopyButton text={reply.trace_id} label="Copy trace ID" />
               </div>
             </section>}
