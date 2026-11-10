@@ -107,7 +107,10 @@ export function Chat() {
                 }}
                 className="min-h-11 max-h-40 min-w-0 flex-1 resize-y rounded-md px-2 py-1.5 text-base placeholder:text-neutral-500" />
               {chat.pending ? (
-                <button type="button" onClick={chat.cancel}
+                <button type="button" onClick={event => {
+                  event.preventDefault();
+                  chat.cancel();
+                }}
                   className="flex min-h-11 items-center gap-1.5 rounded-lg border border-neutral-300 px-3 text-sm font-semibold hover:bg-neutral-100">
                   <Square className="size-3" aria-hidden="true" /> Stop
                 </button>
