@@ -10,6 +10,17 @@ export interface ChatRequest {
   request_id: string;
 }
 
+export interface SavedMemory {
+  id: string;
+  kind: "goal" | "preference" | "project" | "plan" | "commitment";
+  content: string;
+  observed_at: string;
+  created_at: string;
+  source_message_ids: string[];
+  active: boolean;
+  superseded_at: string | null;
+}
+
 export interface Citation {
   id: string;
   title: string;

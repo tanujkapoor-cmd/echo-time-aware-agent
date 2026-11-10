@@ -124,7 +124,7 @@ export function Chat() {
         </div>
       </main>
       <aside className="inspector-shell" id="desktop-inspector" hidden={!inspectorOpen}>
-        <AgentInspector reply={inspected} onClose={() => {
+        <AgentInspector reply={inspected} visible={inspectorOpen && drawer !== "inspector"} onClose={() => {
           setInspectorOpen(false);
           inspectorToggle.current?.focus();
         }} />
@@ -133,7 +133,7 @@ export function Chat() {
         <ConversationSidebar {...sidebar} onClose={closeDrawer} />
       </SideDrawer>
       <SideDrawer open={drawer === "inspector"} side="right" label="Agent Inspector" desktopAt={1200} onClose={closeDrawer}>
-        <AgentInspector reply={inspected} onClose={closeDrawer} drawer />
+        <AgentInspector reply={inspected} onClose={closeDrawer} visible={drawer === "inspector"} drawer />
       </SideDrawer>
     </div>
   );

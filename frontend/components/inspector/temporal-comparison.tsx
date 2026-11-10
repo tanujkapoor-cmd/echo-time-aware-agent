@@ -13,7 +13,7 @@ const labels: Record<Change["kind"], string> = {
 
 function Evidence({ label, claims }: { label: string; claims: Claim[] }) {
   return (
-    <div className="comparison-evidence">
+    <div className="comparison-evidence" data-period={label.toLowerCase()}>
       <p className="eyebrow">{label}</p>
       {!claims.length ? <p className="comparison-missing">Not available</p> : (
         <ul>

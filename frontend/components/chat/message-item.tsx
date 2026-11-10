@@ -1,4 +1,4 @@
-import { ArrowUpRight, AudioLines, PanelRight } from "lucide-react";
+import { ArrowUpRight, AudioLines, Layers, PanelRight } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { formatTimestamp, webLink } from "../../lib/presentation";
@@ -20,6 +20,9 @@ export function MessageItem({ message, inspect, inspected }: {
           <time dateTime={message.timestamp}>{formatTimestamp(message.timestamp)}</time>
         </div>
         <div className="message-actions">
+          {message.response?.memory_used === true && <span className="message-memory">
+            <Layers size={12} aria-hidden="true" /> Context used
+          </span>}
           <CopyButton text={message.content} label="Copy message" />
           {inspect && <button type="button" onClick={inspect} aria-pressed={inspected} className="inspect-button">
             <PanelRight size={14} aria-hidden="true" /> Inspect

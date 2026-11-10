@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSession, listMessages, sendMessage } from "../lib/api.ts";
+import { createSession, listMemories, listMessages, sendMessage } from "../lib/api.ts";
 
 const session = { id: "fixture", title: "First", created_at: "2026-01-01T00:00:00Z" };
 const request = { session_id: session.id, message: "Hello", request_id: "request" };
@@ -39,6 +39,21 @@ test("server errors retain the backend's code, message and trace ID", async t =>
     name: "ApiError", status: 404, code: "session_not_found",
     message: "Session was not found.", traceId: "trace",
   });
+});
+
+test("saved memory includes superseded records and keeps backend ordering across pages", async t => {
+  const memories = Array.from({ length: 101 }, (_, index) => ({
+    id: String(index), kind: "project", content: "Project " + index,
+    observed_at: session.created_at, created_at: session.created_at, source_message_ids: ["user"],
+    active: index === 0, superseded_at: index === 0 ? null : session.created_at,
+  }));
+  const fetch = t.mock.method(globalThis, "fetch", async path =>
+    Response.json(path.endsWith("offset=0") ? memories.slice(0, 100) : memories.slice(100)));
+  assert.deepEqual(await listMemories(), memories);
+  assert.deepEqual(fetch.mock.calls.map(call => call.arguments[0]), [
+    "/api/v1/memories?include_superseded=true&limit=100&offset=0",
+    "/api/v1/memories?include_superseded=true&limit=100&offset=100",
+  ]);
 });
 
 test("an empty answer is reported as a response error", async t => {

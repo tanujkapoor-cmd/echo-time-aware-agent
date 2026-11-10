@@ -1,7 +1,10 @@
 import { Activity, ArrowUpRight, Clock3, Fingerprint, Globe2, History, Layers, Link2, PanelRightClose, X } from "lucide-react";
+import { useState } from "react";
 import { formatTimestamp, webLink } from "../../lib/presentation";
 import type { ChatReply, Citation } from "../../lib/types";
 import { CopyButton } from "../workspace/copy-button";
+import { Disclosure } from "../workspace/disclosure";
+import { MemoryPanel } from "./memory-panel";
 import { TemporalComparison } from "./temporal-comparison";
 
 function used(value?: boolean) {
@@ -31,17 +34,21 @@ function Source({ source }: { source: Citation }) {
       <p className="source-time">
         Retrieved <time dateTime={source.retrieved_at}>{formatTimestamp(source.retrieved_at)}</time>
       </p>
-      {source.published_at && <p className="source-time">Published {formatTimestamp(source.published_at)}</p>}
-      <blockquote>{source.quote}</blockquote>
+      <Disclosure label="Source excerpt">
+        {source.published_at && <p className="source-time">Published {formatTimestamp(source.published_at)}</p>}
+        <blockquote>{source.quote}</blockquote>
+      </Disclosure>
     </li>
   );
 }
 
-export function AgentInspector({ reply, onClose, drawer }: {
+export function AgentInspector({ reply, onClose, drawer, visible }: {
   reply?: ChatReply;
   onClose: () => void;
   drawer?: boolean;
+  visible: boolean;
 }) {
+  const [view, setView] = useState<"activity" | "memory">("activity");
   return (
     <div className="inspector-panel">
       <header className="inspector-head">
@@ -54,7 +61,17 @@ export function AgentInspector({ reply, onClose, drawer }: {
           {drawer ? <X size={18} aria-hidden="true" /> : <PanelRightClose size={17} aria-hidden="true" />}
         </button>
       </header>
+      <div className="inspector-tabs" role="group" aria-label="Inspector view">
+        <button type="button" aria-pressed={view === "activity"} onClick={() => setView("activity")}>
+          <Activity size={14} aria-hidden="true" /> Reply activity
+        </button>
+        <button type="button" aria-pressed={view === "memory"} onClick={() => setView("memory")}>
+          <Layers size={14} aria-hidden="true" /> Saved memory
+        </button>
+      </div>
       <div className="inspector-content">
+        {view === "memory" ? (visible && <MemoryPanel replyId={reply?.message_id} />) : (
+        <div className="inspector-view" key={reply?.message_id}>
         {!reply ? (
           <>
             <div className="inspector-empty">
@@ -115,6 +132,8 @@ export function AgentInspector({ reply, onClose, drawer }: {
               </div>
             </section>}
           </>
+        )}
+        </div>
         )}
       </div>
     </div>

@@ -1,4 +1,4 @@
-import type { Change, ChatReply, ChatRequest, Citation, Claim, Message, Session } from "./types";
+import type { Change, ChatReply, ChatRequest, Citation, Claim, Message, SavedMemory, Session } from "./types";
 
 const root = "/api/v1";
 
@@ -139,4 +139,30 @@ export async function sendMessage(body: ChatRequest, signal?: AbortSignal): Prom
   const data = await json(await request("/chat", post(body, signal)));
   if (!isReply(data)) throw new ApiError("Echo returned an empty or invalid answer.");
   return data;
+}
+
+const memoryKinds = new Set<string>(["goal", "preference", "project", "plan", "commitment"]);
+
+function isDate(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
+function isSavedMemory(value: unknown): value is SavedMemory {
+  const row = record(value);
+  return typeof row?.id === "string" && typeof row.kind === "string" && memoryKinds.has(row.kind)
+    && typeof row.content === "string" && isDate(row.observed_at) && isDate(row.created_at)
+    && (row.superseded_at === null || isDate(row.superseded_at))
+    && typeof row.active === "boolean" && Array.isArray(row.source_message_ids)
+    && row.source_message_ids.every(id => typeof id === "string");
+}
+
+export async function listMemories(signal?: AbortSignal): Promise<SavedMemory[]> {
+  const result = new Map<string, SavedMemory>();
+  const limit = 100;
+  for (let offset = 0; ; offset += limit) {
+    const page = await json(await request("/memories?include_superseded=true&limit=" + limit + "&offset=" + offset, { signal }));
+    if (!Array.isArray(page) || !page.every(isSavedMemory)) throw new ApiError("Echo returned invalid saved memory.");
+    for (const memory of page) result.set(memory.id, memory);
+    if (page.length < limit) return [...result.values()];
+  }
 }
