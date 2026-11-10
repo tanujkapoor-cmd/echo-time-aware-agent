@@ -29,7 +29,7 @@ function MemoryCard({ memory }: { memory: SavedMemory }) {
 
 type MemoryResult = { memories: SavedMemory[] } | { error: string };
 
-export function MemoryPanel({ replyId }: { replyId?: string }) {
+export function MemoryPanel({ replyId, visible }: { replyId?: string; visible: boolean }) {
   const [revision, setRevision] = useState(0);
   const [loaded, setLoaded] = useState<{ key: string; result: MemoryResult }>();
   const key = (replyId ?? "") + ":" + revision;
@@ -46,6 +46,7 @@ export function MemoryPanel({ replyId }: { replyId?: string }) {
   }
 
   useEffect(() => {
+    if (!visible) return;
     const controller = new AbortController();
     void listMemories(controller.signal).then(
       memories => { if (!controller.signal.aborted) setLoaded({ key, result: { memories } }); },
@@ -56,7 +57,7 @@ export function MemoryPanel({ replyId }: { replyId?: string }) {
       },
     );
     return () => controller.abort();
-  }, [key]);
+  }, [key, visible]);
 
   return (
     <section className="memory-panel" aria-label="Saved memory">

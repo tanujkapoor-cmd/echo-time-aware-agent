@@ -22,6 +22,7 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
   return (
     <>
       <button className="icon-button compact-action" type="button" onClick={() => void copy()}
+        data-copied={status === "copied" || undefined}
         title={status === "copied" ? "Copied" : label} aria-label={label}>
         {status === "copied" ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
       </button>

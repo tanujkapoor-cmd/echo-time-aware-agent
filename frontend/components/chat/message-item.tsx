@@ -1,33 +1,39 @@
-import { ArrowUpRight, AudioLines, Layers, PanelRight } from "lucide-react";
+import { ArrowUpRight, AudioLines, Layers, LoaderCircle, PanelRight } from "lucide-react";
+import { memo } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { formatTimestamp, webLink } from "../../lib/presentation";
 import type { Message } from "../../lib/types";
 import { CopyButton } from "../workspace/copy-button";
 
-export function MessageItem({ message, inspect, inspected }: {
+export const MessageItem = memo(function MessageItem({ message, inspect, inspected, entering, streaming }: {
   message: Message;
-  inspect?: () => void;
+  inspect?: (id: string) => void;
   inspected?: boolean;
+  entering?: boolean;
+  streaming?: string;
 }) {
   const user = message.role === "user";
   return (
-    <article className={"message " + (user ? "message--user" : "message--assistant")}>
+    <article className={"message " + (user ? "message--user" : "message--assistant")}
+      data-entering={entering || undefined} data-streaming={!!streaming || undefined}>
       <header className="message-head">
         {!user && <span className="echo-mark message-avatar"><AudioLines size={17} aria-hidden="true" /></span>}
         <div>
           <p className="message-role">{user ? "You" : "Echo"}</p>
-          <time dateTime={message.timestamp}>{formatTimestamp(message.timestamp)}</time>
+          {streaming
+            ? <p className="message-progress" role="status"><LoaderCircle size={12} aria-hidden="true" /> {streaming}</p>
+            : <time dateTime={message.timestamp}>{formatTimestamp(message.timestamp)}</time>}
         </div>
-        <div className="message-actions">
+        {!streaming && <div className="message-actions">
           {message.response?.memory_used === true && <span className="message-memory">
             <Layers size={12} aria-hidden="true" /> Context used
           </span>}
           <CopyButton text={message.content} label="Copy message" />
-          {inspect && <button type="button" onClick={inspect} aria-pressed={inspected} className="inspect-button">
+          {inspect && <button type="button" onClick={() => inspect(message.id)} aria-pressed={inspected} className="inspect-button">
             <PanelRight size={14} aria-hidden="true" /> Inspect
           </button>}
-        </div>
+        </div>}
       </header>
       {user ? <p className="message-text">{message.content}</p> : (
         <div className="message-body">
@@ -61,4 +67,4 @@ export function MessageItem({ message, inspect, inspected }: {
       )}
     </article>
   );
-}
+});

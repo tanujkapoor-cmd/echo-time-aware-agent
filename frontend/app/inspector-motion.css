@@ -100,3 +100,19 @@
 }
 .comparison-evidence[data-period="current"] { border-color: var(--accent-line); }
 .comparison-evidence[data-period="current"] .eyebrow { color: var(--accent-text); }
+
+@media (min-width: 1200px) {
+  .inspector-shell {
+    overflow: clip;
+    opacity: 1;
+    visibility: visible;
+    transition: opacity var(--motion-panel), padding-right var(--motion-panel) var(--motion-curve),
+      visibility var(--motion-panel) allow-discrete;
+  }
+  .inspector-shell .inspector-panel { min-width: calc(var(--inspector-expanded-width) - .72rem); }
+  .echo-app[data-inspector-open="false"] .inspector-shell {
+    padding-right: 0;
+    opacity: 0;
+    visibility: hidden;
+  }
+}

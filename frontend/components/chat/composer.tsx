@@ -41,16 +41,16 @@ export function Composer({ input, draft, busy, sending, welcoming, error, failed
           {welcoming && <span className="composer-tag" aria-hidden="true"><AudioLines size={15} /> Ask Echo</span>}
           <label htmlFor="message" className="sr-only">Message</label>
           <div className="composer-field">
-          <div className="composer-mirror" ref={mirror} aria-hidden="true">{value + "\u200b"}</div>
-          <textarea id="message" ref={input} rows={1} maxLength={4000} value={value}
-            readOnly={busy} placeholder="Message Echo"
-            onChange={event => draft.write(event.target.value)}
-            onKeyDown={event => {
-              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                event.currentTarget.form?.requestSubmit();
-              }
-            }} />
+            <div className="composer-mirror" ref={mirror} aria-hidden="true">{value + "\u200b"}</div>
+            <textarea id="message" ref={input} rows={1} maxLength={4000} value={value}
+              readOnly={busy} placeholder="Message Echo"
+              onChange={event => draft.write(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }} />
           </div>
           {sending
             ? <button type="button" className="stop-button" onClick={event => { event.preventDefault(); onStop(); }}>

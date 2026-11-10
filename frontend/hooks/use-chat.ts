@@ -13,6 +13,12 @@ function errorText(error: unknown) {
 
 const sessionKey = "echo.active-session";
 
+type DisplayMessage = Message & { renderKey?: string };
+
+export function answerKey(requestId: string) {
+  return "answer:" + requestId;
+}
+
 function readSelection() {
   try { return localStorage.getItem(sessionKey); } catch { return null; }
 }
@@ -25,7 +31,7 @@ export function useChat(draft: DraftStore) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [session, setSession] = useState<Session>();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [pending, setPending] = useState<Message>();
   const [preview, setPreview] = useState("");
   const [stage, setStage] = useState<string>();
@@ -38,8 +44,18 @@ export function useChat(draft: DraftStore) {
   const turn = useRef<AbortController | undefined>(undefined);
   const retry = useRef<ChatRequest | undefined>(undefined);
 
-  const showHistory = useCallback((id: string, history: Message[]) => {
-    setMessages(history);
+  const showHistory = useCallback((id: string, history: Message[], savedTurn?: { userKey: string; assistantId: string }) => {
+    if (!savedTurn) setMessages(history);
+    else setMessages(previous => {
+      const keys = new Map(previous.map(message => [message.id, message.renderKey]));
+      const assistantIndex = history.findIndex(message => message.id === savedTurn.assistantId);
+      const user = history[assistantIndex - 1];
+      if (user?.role === "user") keys.set(user.id, savedTurn.userKey);
+      return history.map(message => {
+        const renderKey = keys.get(message.id);
+        return renderKey ? { ...message, renderKey } : message;
+      });
+    });
     const latestQuestion = history.findLast(message => message.role === "user");
     if (latestQuestion) setPreviews(previous => ({ ...previous, [id]: latestQuestion.content }));
   }, []);
@@ -118,6 +134,8 @@ export function useChat(draft: DraftStore) {
     };
     setPending(outgoing);
 
+    let buffer = "";
+    let frame: number | undefined;
     try {
       const active = session ?? await createSession(Array.from(text).slice(0, 64).join(""), signal);
       if (!session) setSessions(previous => [active, ...previous]);
@@ -128,20 +146,28 @@ export function useChat(draft: DraftStore) {
       const reply = await streamMessage(request, {
         status: setStage,
         sources: setSources,
-        token: chunk => setPreview(previous => previous + chunk),
+        token: chunk => {
+          buffer += chunk;
+          frame ??= requestAnimationFrame(() => {
+            frame = undefined;
+            if (!signal.aborted) setPreview(buffer);
+          });
+        },
       }, signal);
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      frame = undefined;
       retry.current = undefined;
       setPreviews(previous => ({ ...previous, [active.id]: outgoing.content }));
       setMessages(previous => [
         ...previous.filter(item => item.id !== outgoing.id && item.id !== reply.message_id),
-        outgoing,
+        { ...outgoing, renderKey: requestId },
         { id: reply.message_id, role: "assistant", content: reply.answer,
-          timestamp: reply.timestamp, response: reply },
+          timestamp: reply.timestamp, response: reply, renderKey: answerKey(requestId) },
       ]);
       setPending(undefined);
 
       try {
-        showHistory(active.id, await listMessages(active.id, signal));
+        showHistory(active.id, await listMessages(active.id, signal), { userKey: requestId, assistantId: reply.message_id });
       } catch (historyError) {
         if (!signal.aborted) {
           setError("Answer saved. Could not refresh conversation history. " + errorText(historyError));
@@ -152,6 +178,7 @@ export function useChat(draft: DraftStore) {
       setFailedDraft(text);
       setError(signal.aborted ? "Response canceled. Send the same message again to retry." : errorText(sendError));
     } finally {
+      if (frame !== undefined) cancelAnimationFrame(frame);
       turn.current = undefined;
       setPending(undefined);
       setPreview("");

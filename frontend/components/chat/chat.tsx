@@ -1,8 +1,8 @@
 "use client";
 
-import { AudioLines, ChevronRight, LoaderCircle, PanelLeft, PanelRight } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useChat } from "../../hooks/use-chat";
+import { ArrowDown, AudioLines, ChevronRight, LoaderCircle, PanelLeft, PanelRight } from "lucide-react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { answerKey, useChat } from "../../hooks/use-chat";
 import { createDraftStore } from "../../lib/draft";
 import type { Session } from "../../lib/types";
 import { AgentInspector } from "../inspector/agent-inspector";
@@ -29,7 +29,9 @@ export function Chat() {
   const input = useRef<HTMLTextAreaElement>(null);
   const inspectorToggle = useRef<HTMLButtonElement>(null);
   const transcript = useRef<HTMLDivElement>(null);
+  const transcriptColumn = useRef<HTMLDivElement>(null);
   const followBottom = useRef(true);
+  const [showJump, setShowJump] = useState(false);
   const [inspectedId, setInspectedId] = useState<string>();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
@@ -39,24 +41,45 @@ export function Chat() {
   const inspected = chat.messages.find(item => item.id === inspectedId)?.response
     ?? chat.messages.findLast(item => item.response)?.response ?? undefined;
   const welcoming = !chat.loading && chat.messages.length === 0 && !chat.pending;
+  const pendingKey = chat.pending && answerKey(chat.pending.id);
+  const visibleMessages: typeof chat.messages = chat.pending && pendingKey ? [...chat.messages, chat.pending, {
+    id: pendingKey, role: "assistant", content: chat.preview, timestamp: chat.pending.timestamp,
+  }] : chat.messages;
+  const progress = chat.stage ? (stageLabels[chat.stage] ?? chat.stage) : "Waiting for Echo…";
+  const streamLabel = chat.sources.length ? progress + " · " + chat.sources.length + " sources received" : progress;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const view = transcript.current;
     if (view && followBottom.current) view.scrollTop = view.scrollHeight;
-  }, [chat.messages, chat.pending, chat.preview]);
+  }, [chat.messages, chat.pending, chat.preview, conversationView]);
+
+  useLayoutEffect(() => {
+    const view = transcript.current;
+    const column = transcriptColumn.current;
+    if (!view || !column) return;
+    const observer = new ResizeObserver(() => {
+      if (followBottom.current) view.scrollTop = view.scrollHeight;
+    });
+    observer.observe(view);
+    observer.observe(column);
+    return () => observer.disconnect();
+  }, [conversationView]);
 
   async function openConversation(session?: Session) {
     followBottom.current = true;
     setInspectedId(undefined);
     closeDrawer();
-    if (await chat.openConversation(session)) setConversationView(previous => previous + 1);
+    if (await chat.openConversation(session)) {
+      setShowJump(false);
+      setConversationView(previous => previous + 1);
+    }
   }
 
-  function inspect(messageId: string) {
+  const inspect = useCallback((messageId: string) => {
     setInspectedId(messageId);
     if (window.matchMedia("(min-width: 1200px)").matches) setInspectorOpen(true);
     else setDrawer("inspector");
-  }
+  }, []);
 
   const sidebar = {
     sessions: chat.sessions,
@@ -98,34 +121,47 @@ export function Chat() {
           </button>
         </header>
         <div className="workspace-body">
-          <div className="transcript" ref={transcript} role="region" aria-label="Conversation messages" tabIndex={welcoming ? undefined : 0}
-            onScroll={event => {
-              const view = event.currentTarget;
-              followBottom.current = view.scrollHeight - view.clientHeight - view.scrollTop < 80;
-            }}>
-            <div className="chat-column transcript-column" key={conversationView}>
-              {chat.loading && <p role="status" className="chat-status"><LoaderCircle size={16} aria-hidden="true" /> Loading conversation…</p>}
-              {welcoming && <Welcome />}
-              {chat.messages.map(message => <MessageItem key={message.id} message={message}
-                inspect={message.response ? () => inspect(message.id) : undefined}
-                inspected={message.response?.message_id === inspected?.message_id} />)}
-              {chat.pending && <MessageItem message={chat.pending} />}
-              {chat.pending && <p role="status" className="chat-status">
-                <LoaderCircle size={16} aria-hidden="true" />
-                {chat.stage ? (stageLabels[chat.stage] ?? chat.stage) : "Waiting for Echo…"}
-                {chat.sources.length > 0 && <span>· {chat.sources.length} sources received</span>}
-              </p>}
-              {chat.pending && chat.preview && <p className="stream-preview">{chat.preview}</p>}
+          <div className="transcript-frame">
+            <div className="transcript" ref={transcript} role="region" aria-label="Conversation messages" tabIndex={welcoming ? undefined : 0}
+              onScroll={event => {
+                const view = event.currentTarget;
+                followBottom.current = view.scrollHeight - view.clientHeight - view.scrollTop < 80;
+                setShowJump(!followBottom.current);
+              }}>
+              <div className="chat-column transcript-column" key={conversationView} ref={transcriptColumn}>
+                {chat.loading && <p role="status" className="chat-status"><LoaderCircle size={16} aria-hidden="true" /> Loading conversation…</p>}
+                {welcoming && <Welcome />}
+                {visibleMessages.map(message => (
+                  <MessageItem key={message.renderKey ?? message.id} message={message}
+                    entering={!!message.renderKey || message.id === chat.pending?.id || message.id === pendingKey}
+                    streaming={message.id === pendingKey ? streamLabel : undefined}
+                    inspect={message.response ? inspect : undefined}
+                    inspected={!!message.response && message.response.message_id === inspected?.message_id} />
+                ))}
             </div>
+          </div>
+          {showJump && !welcoming && <button type="button" className="jump-latest" onClick={() => {
+            const view = transcript.current;
+            const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            view?.focus({ preventScroll: true });
+            view?.scrollTo({ top: view.scrollHeight, behavior: reduced ? "instant" : "smooth" });
+          }}><ArrowDown size={15} aria-hidden="true" /> Latest reply</button>}
           </div>
           <Composer input={input} draft={draft} busy={chat.busy} sending={!!chat.pending} welcoming={welcoming}
             error={chat.error} failedDraft={chat.failedDraft} onStop={chat.cancel}
-            onSend={() => { followBottom.current = true; setInspectedId(undefined); void chat.send(); }} />
+            onSend={() => {
+              if (chat.busy || !draft.read().trim()) return;
+              followBottom.current = true;
+              setShowJump(false);
+              setInspectedId(undefined);
+              input.current?.focus({ preventScroll: true });
+              void chat.send();
+            }} />
           {welcoming && <Suggestions draft={draft} disabled={chat.busy}
             onPrompt={prompt => { draft.write(prompt); input.current?.focus(); }} />}
         </div>
       </main>
-      <aside className="inspector-shell" id="desktop-inspector" hidden={!inspectorOpen}>
+      <aside className="inspector-shell" id="desktop-inspector" inert={!inspectorOpen}>
         <AgentInspector reply={inspected} visible={inspectorOpen && drawer !== "inspector"} onClose={() => {
           setInspectorOpen(false);
           inspectorToggle.current?.focus();

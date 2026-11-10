@@ -5,7 +5,8 @@
   overflow: hidden;
   background: var(--canvas);
   --sidebar-width: 230px;
-  --inspector-width: 318px;
+  --inspector-expanded-width: 318px;
+  --inspector-width: var(--inspector-expanded-width);
   --column-width: 47rem;
   --gutter: clamp(1rem, 4vw, 2.5rem);
 }
@@ -238,7 +239,6 @@
   font-size: .91rem;
   line-height: 1.5;
 }
-@supports (field-sizing: content) { .composer textarea { field-sizing: content; } }
 .composer textarea::placeholder { color: var(--subtle); }
 .send-button, .stop-button, .retry-button {
   display: inline-flex;
@@ -268,7 +268,6 @@
 .chat-status { display: flex; align-items: center; gap: .5rem; color: var(--muted); font-size: .82rem; }
 .chat-status svg { flex: none; color: var(--accent-text); animation: loading-spin 1s linear infinite; }
 @keyframes loading-spin { to { transform: rotate(1turn); } }
-.stream-preview { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .935rem; line-height: 1.8; }
 .message { min-width: 0; }
 .message--assistant { padding: .2rem .15rem 1.1rem; border-bottom: 1px solid var(--line); }
 .message--assistant:last-child { border-bottom: 0; }
@@ -321,7 +320,7 @@ a.citation-link:hover { border-color: var(--coral); }
 
 @media (min-width: 1200px) {
   .echo-app { grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--inspector-width); }
-  .inspector-shell:not([hidden]) { display: flex; min-width: 0; min-height: 0; padding: .72rem .72rem .72rem 0; }
+  .inspector-shell { display: flex; min-width: 0; min-height: 0; padding: .72rem .72rem .72rem 0; }
   .workspace-bar .desktop-inspector-toggle { display: inline-flex; }
   .workspace-bar .mobile-inspector-toggle { display: none; }
 }

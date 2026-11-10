@@ -1,4 +1,37 @@
 .transcript-column { animation: workspace-in var(--motion-card) var(--motion-curve) both; }
+.workspace[data-welcome]::before { animation: welcome-glow 540ms var(--motion-curve) both; }
+@keyframes welcome-glow { from { opacity: .45; } }
+.transcript-frame { position: relative; display: flex; flex: 1; min-width: 0; min-height: 0; }
+.workspace[data-welcome] .transcript-frame, .workspace[data-welcome] .transcript { flex: none; width: 100%; }
+.message[data-entering] { animation: workspace-in var(--motion-card) var(--motion-curve) both; }
+.message-progress {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  color: var(--muted);
+  font-size: .68rem;
+}
+.message-progress svg { flex: none; color: var(--accent-text); animation: loading-spin 1s linear infinite; }
+.message[data-streaming] .message-body { min-height: 1.7em; }
+.jump-latest {
+  position: absolute;
+  z-index: 1;
+  inset: auto auto .6rem 50%;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .4rem .7rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font-size: .74rem;
+  font-weight: 750;
+  animation: workspace-in var(--motion-hover) var(--motion-curve) both;
+}
+.jump-latest:hover { color: var(--accent-text); }
 
 .composer-field {
   position: relative;
