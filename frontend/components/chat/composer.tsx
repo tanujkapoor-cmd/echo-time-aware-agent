@@ -1,18 +1,33 @@
 import { ArrowUp, AudioLines, CircleAlert, CornerDownLeft, RotateCcw, Square } from "lucide-react";
-import type { RefObject } from "react";
+import { useLayoutEffect, useRef, useSyncExternalStore, type RefObject } from "react";
+import type { DraftStore } from "../../lib/draft";
 
-export function Composer({ input, draft, busy, sending, welcoming, error, canRetry, onChange, onSend, onStop }: {
+export function Composer({ input, draft, busy, sending, welcoming, error, failedDraft, onSend, onStop }: {
   input: RefObject<HTMLTextAreaElement | null>;
-  draft: string;
+  draft: DraftStore;
   busy: boolean;
   sending: boolean;
   welcoming: boolean;
   error?: string;
-  canRetry: boolean;
-  onChange: (value: string) => void;
+  failedDraft?: string;
   onSend: () => void;
   onStop: () => void;
 }) {
+  const value = useSyncExternalStore(draft.subscribe, draft.read, draft.read);
+  const mirror = useRef<HTMLDivElement>(null);
+  const canRetry = !!failedDraft && failedDraft === value.trim();
+
+  useLayoutEffect(() => {
+    const measure = mirror.current;
+    const field = measure?.parentElement;
+    if (!measure || !field) return;
+    const update = () => field.style.setProperty("--composer-height", measure.offsetHeight + "px");
+    const observer = new ResizeObserver(update);
+    observer.observe(measure);
+    update();
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="composer-wrap">
       <form className="chat-column" onSubmit={event => { event.preventDefault(); onSend(); }}>
@@ -25,26 +40,29 @@ export function Composer({ input, draft, busy, sending, welcoming, error, canRet
         <div className="composer" data-sending={sending || undefined}>
           {welcoming && <span className="composer-tag" aria-hidden="true"><AudioLines size={15} /> Ask Echo</span>}
           <label htmlFor="message" className="sr-only">Message</label>
-          <textarea id="message" ref={input} rows={1} maxLength={4000} value={draft}
+          <div className="composer-field">
+          <div className="composer-mirror" ref={mirror} aria-hidden="true">{value + "\u200b"}</div>
+          <textarea id="message" ref={input} rows={1} maxLength={4000} value={value}
             readOnly={busy} placeholder="Message Echo"
-            onChange={event => onChange(event.target.value)}
+            onChange={event => draft.write(event.target.value)}
             onKeyDown={event => {
               if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                 event.preventDefault();
                 event.currentTarget.form?.requestSubmit();
               }
             }} />
+          </div>
           {sending
             ? <button type="button" className="stop-button" onClick={event => { event.preventDefault(); onStop(); }}>
               <Square size={13} aria-hidden="true" /> Stop
             </button>
-            : <button type="submit" className="send-button" aria-label="Send" disabled={busy || !draft.trim()}>
+            : <button type="submit" className="send-button" aria-label="Send" disabled={busy || !value.trim()}>
               <ArrowUp size={19} aria-hidden="true" />
             </button>}
         </div>
         <div className="composer-foot">
           <span><CornerDownLeft size={12} aria-hidden="true" /> Enter to send <span className="shortcut-extra">· Shift + Enter for a new line</span></span>
-          {draft.length > 0 && <span>{draft.length.toLocaleString()} / 4,000</span>}
+          {value.length > 0 && <span>{value.length.toLocaleString()} / 4,000</span>}
         </div>
       </form>
     </div>

@@ -8,7 +8,6 @@
 
 .echo-app { transition-duration: var(--motion-panel); transition-timing-function: var(--motion-curve); }
 
-.workspace-body { animation: workspace-in var(--motion-card) var(--motion-curve) both; }
 @keyframes workspace-in {
   from { opacity: .55; transform: translateY(4px); }
 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, createSession, listMessages, listSessions } from "../lib/api";
+import type { DraftStore } from "../lib/draft";
 import { streamMessage } from "../lib/sse";
 import type { ChatRequest, Citation, Message, Session } from "../lib/types";
 
@@ -20,12 +21,11 @@ function rememberSelection(id: string) {
   try { localStorage.setItem(sessionKey, id); } catch { /* Storage may be disabled. */ }
 }
 
-export function useChat() {
+export function useChat(draft: DraftStore) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [session, setSession] = useState<Session>();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<Message>();
   const [preview, setPreview] = useState("");
   const [stage, setStage] = useState<string>();
@@ -86,7 +86,7 @@ export function useChat() {
       if (!target) setSessions(previous => [selected, ...previous]);
       setSession(selected);
       showHistory(selected.id, history);
-      setDraft("");
+      draft.write("");
       retry.current = undefined;
       rememberSelection(selected.id);
       return true;
@@ -99,7 +99,7 @@ export function useChat() {
   }
 
   async function send() {
-    const text = draft.trim();
+    const text = draft.read().trim();
     if (operation.current || loading || !text) return;
     operation.current = true;
     const controller = new AbortController();
@@ -108,7 +108,7 @@ export function useChat() {
     setBusy(true);
     setError(undefined);
     setFailedDraft(undefined);
-    setDraft("");
+    draft.write("");
 
     const saved = retry.current;
     const requestId = saved && saved.session_id === session?.id && saved.message === text
@@ -148,7 +148,7 @@ export function useChat() {
         }
       }
     } catch (sendError) {
-      setDraft(text);
+      draft.write(text);
       setFailedDraft(text);
       setError(signal.aborted ? "Response canceled. Send the same message again to retry." : errorText(sendError));
     } finally {
@@ -163,8 +163,8 @@ export function useChat() {
   }
 
   return {
-    sessions, previews, session, messages, draft, setDraft, pending, loading,
-    busy: busy || loading, error, canRetry: !!failedDraft && failedDraft === draft.trim(),
+    sessions, previews, session, messages, pending, loading,
+    busy: busy || loading, error, failedDraft,
     send, openConversation, preview, stage, sources,
     cancel: () => turn.current?.abort(),
   };

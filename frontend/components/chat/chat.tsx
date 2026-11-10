@@ -3,6 +3,7 @@
 import { AudioLines, ChevronRight, LoaderCircle, PanelLeft, PanelRight } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useChat } from "../../hooks/use-chat";
+import { createDraftStore } from "../../lib/draft";
 import type { Session } from "../../lib/types";
 import { AgentInspector } from "../inspector/agent-inspector";
 import { ConversationSidebar } from "../sidebar/conversations";
@@ -23,7 +24,8 @@ const stageLabels: Record<string, string> = {
 };
 
 export function Chat() {
-  const chat = useChat();
+  const [draft] = useState(createDraftStore);
+  const chat = useChat(draft);
   const input = useRef<HTMLTextAreaElement>(null);
   const inspectorToggle = useRef<HTMLButtonElement>(null);
   const transcript = useRef<HTMLDivElement>(null);
@@ -95,13 +97,13 @@ export function Chat() {
             <PanelRight size={18} aria-hidden="true" /> <span>Inspector</span>
           </button>
         </header>
-        <div className="workspace-body" key={conversationView}>
+        <div className="workspace-body">
           <div className="transcript" ref={transcript} role="region" aria-label="Conversation messages" tabIndex={welcoming ? undefined : 0}
             onScroll={event => {
               const view = event.currentTarget;
               followBottom.current = view.scrollHeight - view.clientHeight - view.scrollTop < 80;
             }}>
-            <div className="chat-column transcript-column">
+            <div className="chat-column transcript-column" key={conversationView}>
               {chat.loading && <p role="status" className="chat-status"><LoaderCircle size={16} aria-hidden="true" /> Loading conversation…</p>}
               {welcoming && <Welcome />}
               {chat.messages.map(message => <MessageItem key={message.id} message={message}
@@ -116,11 +118,11 @@ export function Chat() {
               {chat.pending && chat.preview && <p className="stream-preview">{chat.preview}</p>}
             </div>
           </div>
-          <Composer input={input} draft={chat.draft} busy={chat.busy} sending={!!chat.pending} welcoming={welcoming}
-            error={chat.error} canRetry={chat.canRetry} onChange={chat.setDraft} onStop={chat.cancel}
+          <Composer input={input} draft={draft} busy={chat.busy} sending={!!chat.pending} welcoming={welcoming}
+            error={chat.error} failedDraft={chat.failedDraft} onStop={chat.cancel}
             onSend={() => { followBottom.current = true; setInspectedId(undefined); void chat.send(); }} />
-          {welcoming && <Suggestions draft={chat.draft} disabled={chat.busy}
-            onPrompt={prompt => { chat.setDraft(prompt); input.current?.focus(); }} />}
+          {welcoming && <Suggestions draft={draft} disabled={chat.busy}
+            onPrompt={prompt => { draft.write(prompt); input.current?.focus(); }} />}
         </div>
       </main>
       <aside className="inspector-shell" id="desktop-inspector" hidden={!inspectorOpen}>

@@ -1,0 +1,48 @@
+.transcript-column { animation: workspace-in var(--motion-card) var(--motion-curve) both; }
+
+.composer-field {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.composer textarea, .composer-mirror {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  max-height: 8.4rem;
+  padding: .66rem .45rem;
+  font-size: .91rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+.composer textarea {
+  height: var(--composer-height, 44px);
+  field-sizing: fixed;
+  overflow-y: auto;
+  transition: height var(--motion-hover) var(--motion-curve);
+}
+.composer-mirror {
+  position: absolute;
+  inset: 0 0 auto;
+  visibility: hidden;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.composer {
+  transition: border-color var(--motion-hover), box-shadow var(--motion-card) var(--motion-curve);
+}
+.send-button, .stop-button, .retry-button, .suggestion, .icon-button, .inspect-button, .inspector-toggle, .citation-link {
+  transition: background var(--motion-hover), border-color var(--motion-hover), color var(--motion-hover),
+    box-shadow var(--motion-hover), transform var(--motion-press), opacity var(--motion-hover);
+}
+.send-button:hover:not(:disabled), .suggestion:hover:not(:disabled) { transform: translateY(-1px); }
+.send-button:active:not(:disabled), .stop-button:active, .retry-button:active, .suggestion:active,
+.icon-button:active:not(:disabled), .inspect-button:active, .inspector-toggle:active, .citation-link:active {
+  transform: scale(.97);
+}
+.message-actions button[data-copied] { animation: workspace-in var(--motion-card) var(--motion-curve); }
+.composer-error { animation: workspace-in var(--motion-card) var(--motion-curve) both; }

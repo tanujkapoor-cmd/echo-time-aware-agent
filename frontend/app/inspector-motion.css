@@ -40,7 +40,7 @@
 .memory-head h3 { margin-top: .22rem; font-size: 1rem; font-weight: 800; letter-spacing: -.02em; }
 .memory-intro, .memory-status { margin-top: .45rem; color: var(--muted); font-size: .72rem; line-height: 1.55; }
 .memory-status { display: flex; align-items: center; gap: .45rem; margin-top: .9rem; }
-.memory-status svg { flex: none; animation: spin 1s linear infinite; }
+.memory-status svg { flex: none; animation: loading-spin 1s linear infinite; }
 .memory-timeline { display: grid; gap: .95rem; margin-top: 1rem; }
 .memory-day h4 { margin-bottom: .45rem; color: var(--muted); font-size: .72rem; font-weight: 750; }
 .memory-day > ul { display: grid; gap: .45rem; padding-left: .55rem; border-left: 1px solid var(--line-strong); }
