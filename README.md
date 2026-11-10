@@ -1,8 +1,8 @@
 # Echo
 
-Echo is a FastAPI chat backend for the minimi engineering challenge. It can recall a previous answer, search again, and compare the evidence at two different points in time. The model has one external tool: Tavily web search.
+Echo is a time-aware research chat for the minimi engineering challenge. Its Next.js interface connects to a FastAPI backend that can recall a previous answer, search again, and compare evidence from two different points in time. Tavily web search is the model's only external tool.
 
-## Run locally
+## Run the backend
 
 From this directory, with Python 3.12 or later:
 
@@ -18,6 +18,41 @@ Copy-Item .env.example .env
 On macOS/Linux use `python3.12 -m venv .venv`, `cp .env.example .env`, and replace `.\.venv\Scripts\python.exe` with `.venv/bin/python`. Run commands from the project root so the default SQLite path and `.env` resolve there. Browse [OpenAPI docs](http://127.0.0.1:8000/docs) or call `GET /api/v1/health`. Health checks schema access; they do not test provider credentials. Session and history APIs work without keys. Chat inference requires OpenAI; a turn requiring web search reports insufficient evidence if Tavily is unavailable.
 
 Set `OPENAI_MODEL` to a Chat Completions model supporting strict function calls and structured output. For PostgreSQL install `".[dev,postgres]"`, set `ECHO_DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@HOST/DB`, and run the same migrations before starting. SQLite uses FTS5 when available; PostgreSQL and SQLite without FTS5 use bounded ranking of recent rows. See [design.md](design.md) for database and deployment limits.
+
+## Run the frontend
+
+Keep the backend running on port 8000. In a second terminal, from the project root, run the following commands with Node.js 22.18 or later.
+
+~~~powershell
+cd frontend
+npm.cmd ci
+Copy-Item .env.example .env.local
+npm.cmd run dev
+~~~
+
+On macOS and Linux, use `npm` and `cp .env.example .env.local`. Open [Echo Chat](http://127.0.0.1:3000).
+
+`NEXT_PUBLIC_API_BASE_URL` is the backend origin and defaults to `http://127.0.0.1:8000`. Next.js forwards same-origin `/api/v1` requests to that origin. Set it before starting development or building for production. Put provider keys in the backend `.env`.
+
+1. Start a new chat. Choose the Python release prompt to fill the composer and press **Enter** to send. Use **Shift+Enter** for a newline.
+2. In the same chat, ask “Has anything changed?” or “What did you tell me earlier about Python?” Reopen the conversation from the sidebar to see its saved messages.
+3. Open **Agent Inspector** to see the latest reply's search and memory usage, elapsed time, search calls, citations, detected changes, and trace ID. Select **Inspect** on an older reply to see its metadata. The backend does not return per-reply memory references.
+
+The frontend uses session creation, session listing, message history, and the streaming chat endpoint. It uses the JSON chat endpoint if the server has no stream route. **Stop** cancels the browser request. Resending the same message after cancellation or interruption reuses the request ID in the current page so a committed reply can be recovered. Echo emits progress during processing and sends answer fragments after saving the turn.
+
+### Frontend checks
+
+From `frontend/`, run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build`. The test suite uses Node's built-in runner. See [verification](VERIFICATION.md) for the browser and backend checks.
+
+### Publish the Git repository
+
+With GitHub CLI installed and signed in, run this from the project root. Replace `YOUR_ACCOUNT` with your GitHub username or organization.
+
+~~~powershell
+gh repo create YOUR_ACCOUNT/echo --public --source . --remote origin --push
+~~~
+
+For an existing empty GitHub repository, use `git remote add origin <your-repository-url>` and `git push -u origin main`.
 
 ## API
 

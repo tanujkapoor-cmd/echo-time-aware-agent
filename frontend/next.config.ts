@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const config: NextConfig = {
+  agentRules: false,
+  devIndicators: false,
+  turbopack: { root: process.cwd() },
   async rewrites() {
     const backend = new URL(process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000");
     if (!["http:", "https:"].includes(backend.protocol) || backend.href !== backend.origin + "/") {

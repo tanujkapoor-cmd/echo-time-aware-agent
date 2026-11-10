@@ -38,6 +38,10 @@ stateDiagram-v2
 
 A turn reads a bounded context and the session revision in a short database session. It releases that connection before inference or search. It resolves the referent, obtains evidence when needed, and validates the draft. A short transaction compares and increments the session revision, then writes the completed turn and associated memory or snapshot. If the revision changed, the response is replayed by request ID when possible; otherwise the caller retries against the updated conversation. Errors before commit leave no half turn. SSE observes the same state machine; its successful completion follows commit.
 
+### Frontend integration
+
+The Next.js client uses a same-origin rewrite for FastAPI REST and SSE. This keeps the browser on one origin and leaves the backend's demo identity and CORS behavior unchanged. The client keeps the selected session ID locally and loads its messages from the backend. It renders streamed fragments as a preview and uses the completion payload for the saved reply. After an interruption it can resend the same request ID. The inspector uses per-reply response fields from both the stream and stored history.
+
 ### Routing and the only tool
 
 Rules recognize general questions, freshness cues, contextual follow-ups, explicit recall, and comparison. For “Has anything changed?” immediately after research, the adjacent snapshot supplies the baseline. Explicit topic matches use ranked candidates; ties and stale conversational referents can use one structured, tool-free resolver call. The resolver can only select a supplied snapshot ID or, for current-fact follow-ups without research, suggest a short public subject grounded in a prior user question. If the system cannot establish a comparison baseline, it asks for clarification. Ordinary recall and personal plan questions do not search.
