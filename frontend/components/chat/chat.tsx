@@ -9,7 +9,7 @@ import { ConversationSidebar } from "../sidebar/conversations";
 import { SideDrawer } from "../workspace/side-drawer";
 import { Composer } from "./composer";
 import { MessageItem } from "./message-item";
-import { Welcome } from "./welcome";
+import { Suggestions, Welcome } from "./welcome";
 
 const stageLabels: Record<string, string> = {
   receive_query: "Request received",
@@ -35,6 +35,7 @@ export function Chat() {
   const closeDrawer = useCallback(() => setDrawer(undefined), []);
   const inspected = chat.messages.find(item => item.id === inspectedId)?.response
     ?? chat.messages.findLast(item => item.response)?.response ?? undefined;
+  const welcoming = !chat.loading && chat.messages.length === 0 && !chat.pending;
 
   useEffect(() => {
     const view = transcript.current;
@@ -67,7 +68,7 @@ export function Chat() {
   return (
     <div className="echo-app" data-sidebar-open={sidebarOpen} data-inspector-open={inspectorOpen}>
       <aside className="sidebar-shell" id="desktop-conversations"><ConversationSidebar {...sidebar} /></aside>
-      <main className="workspace">
+      <main className="workspace" data-welcome={welcoming || undefined}>
         <header className="workspace-bar">
           <div className="workspace-path">
             <button type="button" className="icon-button desktop-conversations-toggle"
@@ -91,31 +92,33 @@ export function Chat() {
             <PanelRight size={18} aria-hidden="true" /> <span>Inspector</span>
           </button>
         </header>
-        <div className="transcript" ref={transcript} role="region" aria-label="Conversation messages" tabIndex={0}
-          onScroll={event => {
-            const view = event.currentTarget;
-            followBottom.current = view.scrollHeight - view.clientHeight - view.scrollTop < 80;
-          }}>
-          <div className="chat-column transcript-column">
-            {chat.loading && <p role="status" className="chat-status"><LoaderCircle size={16} aria-hidden="true" /> Loading conversation…</p>}
-            {!chat.loading && chat.messages.length === 0 && !chat.pending && (
-              <Welcome draft={chat.draft} disabled={chat.busy} onPrompt={prompt => { chat.setDraft(prompt); input.current?.focus(); }} />
-            )}
-            {chat.messages.map(message => <MessageItem key={message.id} message={message}
-              inspect={message.response ? () => inspect(message.id) : undefined}
-              inspected={message.response?.message_id === inspected?.message_id} />)}
-            {chat.pending && <MessageItem message={chat.pending} />}
-            {chat.pending && <p role="status" className="chat-status">
-              <LoaderCircle size={16} aria-hidden="true" />
-              {chat.stage ? (stageLabels[chat.stage] ?? chat.stage) : "Waiting for Echo…"}
-              {chat.sources.length > 0 && <span>· {chat.sources.length} sources received</span>}
-            </p>}
-            {chat.pending && chat.preview && <p className="stream-preview">{chat.preview}</p>}
+        <div className="workspace-body">
+          <div className="transcript" ref={transcript} role="region" aria-label="Conversation messages" tabIndex={welcoming ? undefined : 0}
+            onScroll={event => {
+              const view = event.currentTarget;
+              followBottom.current = view.scrollHeight - view.clientHeight - view.scrollTop < 80;
+            }}>
+            <div className="chat-column transcript-column">
+              {chat.loading && <p role="status" className="chat-status"><LoaderCircle size={16} aria-hidden="true" /> Loading conversation…</p>}
+              {welcoming && <Welcome />}
+              {chat.messages.map(message => <MessageItem key={message.id} message={message}
+                inspect={message.response ? () => inspect(message.id) : undefined}
+                inspected={message.response?.message_id === inspected?.message_id} />)}
+              {chat.pending && <MessageItem message={chat.pending} />}
+              {chat.pending && <p role="status" className="chat-status">
+                <LoaderCircle size={16} aria-hidden="true" />
+                {chat.stage ? (stageLabels[chat.stage] ?? chat.stage) : "Waiting for Echo…"}
+                {chat.sources.length > 0 && <span>· {chat.sources.length} sources received</span>}
+              </p>}
+              {chat.pending && chat.preview && <p className="stream-preview">{chat.preview}</p>}
+            </div>
           </div>
+          <Composer input={input} draft={chat.draft} busy={chat.busy} sending={!!chat.pending} welcoming={welcoming}
+            error={chat.error} canRetry={chat.canRetry} onChange={chat.setDraft} onStop={chat.cancel}
+            onSend={() => { followBottom.current = true; setInspectedId(undefined); void chat.send(); }} />
+          {welcoming && <Suggestions draft={chat.draft} disabled={chat.busy}
+            onPrompt={prompt => { chat.setDraft(prompt); input.current?.focus(); }} />}
         </div>
-        <Composer input={input} draft={chat.draft} busy={chat.busy} sending={!!chat.pending}
-          error={chat.error} canRetry={chat.canRetry} onChange={chat.setDraft} onStop={chat.cancel}
-          onSend={() => { followBottom.current = true; setInspectedId(undefined); void chat.send(); }} />
       </main>
       <aside className="inspector-shell" id="desktop-inspector" hidden={!inspectorOpen}>
         <AgentInspector reply={inspected} onClose={() => {

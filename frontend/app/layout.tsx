@@ -1,6 +1,4 @@
 import "@fontsource-variable/manrope";
-import "@fontsource-variable/fraunces";
-import "@fontsource-variable/fraunces/wght-italic.css";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";

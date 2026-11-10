@@ -1,11 +1,12 @@
-import { ArrowUp, CircleAlert, CornerDownLeft, RotateCcw, Square } from "lucide-react";
+import { ArrowUp, AudioLines, CircleAlert, CornerDownLeft, RotateCcw, Square } from "lucide-react";
 import type { RefObject } from "react";
 
-export function Composer({ input, draft, busy, sending, error, canRetry, onChange, onSend, onStop }: {
+export function Composer({ input, draft, busy, sending, welcoming, error, canRetry, onChange, onSend, onStop }: {
   input: RefObject<HTMLTextAreaElement | null>;
   draft: string;
   busy: boolean;
   sending: boolean;
+  welcoming: boolean;
   error?: string;
   canRetry: boolean;
   onChange: (value: string) => void;
@@ -22,6 +23,7 @@ export function Composer({ input, draft, busy, sending, error, canRetry, onChang
           </button>}
         </div>}
         <div className="composer" data-sending={sending || undefined}>
+          {welcoming && <span className="composer-tag" aria-hidden="true"><AudioLines size={15} /> Ask Echo</span>}
           <label htmlFor="message" className="sr-only">Message</label>
           <textarea id="message" ref={input} rows={1} maxLength={4000} value={draft}
             readOnly={busy} placeholder="Message Echo"
@@ -36,8 +38,8 @@ export function Composer({ input, draft, busy, sending, error, canRetry, onChang
             ? <button type="button" className="stop-button" onClick={event => { event.preventDefault(); onStop(); }}>
               <Square size={13} aria-hidden="true" /> Stop
             </button>
-            : <button type="submit" className="send-button" disabled={busy || !draft.trim()}>
-              <span>Send</span><ArrowUp size={17} aria-hidden="true" />
+            : <button type="submit" className="send-button" aria-label="Send" disabled={busy || !draft.trim()}>
+              <ArrowUp size={19} aria-hidden="true" />
             </button>}
         </div>
         <div className="composer-foot">
