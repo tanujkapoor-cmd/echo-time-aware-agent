@@ -17,18 +17,19 @@ export function ConversationMenu({ id, title, disabled, onOpen }: {
 
   useEffect(() => {
     if (!expanded) return;
+    const list = trigger.current?.closest(".history-nav");
     function dismiss() {
       if (menu.current?.matches(":popover-open")) menu.current.hidePopover();
     }
     window.addEventListener("resize", dismiss);
-    window.addEventListener("scroll", dismiss, true);
+    list?.addEventListener("scroll", dismiss);
     return () => {
       window.removeEventListener("resize", dismiss);
-      window.removeEventListener("scroll", dismiss, true);
+      list?.removeEventListener("scroll", dismiss);
     };
   }, [expanded]);
 
-  function toggle() {
+  function toggle(last = false) {
     const panel = menu.current;
     const anchor = trigger.current;
     if (!panel || !anchor) return;
@@ -45,7 +46,8 @@ export function ConversationMenu({ id, title, disabled, onOpen }: {
     const top = below + height + 8 <= window.innerHeight ? below : Math.max(8, bounds.top - height - 5);
     panel.style.left = Math.max(8, Math.min(bounds.right - width, window.innerWidth - width - 8)) + "px";
     panel.style.top = top + "px";
-    panel.querySelector<HTMLButtonElement>("[role=menuitem]")?.focus({ preventScroll: true });
+    const items = panel.querySelectorAll<HTMLButtonElement>("[role=menuitem]");
+    items[last ? items.length - 1 : 0]?.focus({ preventScroll: true });
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -88,10 +90,15 @@ export function ConversationMenu({ id, title, disabled, onOpen }: {
     <>
       <button ref={trigger} id={label} className="icon-button conversation-menu-trigger" type="button"
         aria-label={"Options for " + title} aria-haspopup="menu" aria-expanded={expanded} disabled={disabled}
-        onClick={toggle}>
+        aria-controls={label + "-menu"} onClick={() => toggle()}
+        onKeyDown={event => {
+          if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+          event.preventDefault();
+          if (!menu.current?.matches(":popover-open")) toggle(event.key === "ArrowUp");
+        }}>
         <Ellipsis size={17} aria-hidden="true" />
       </button>
-      <div className="conversation-menu" popover="auto" ref={menu} role="menu" aria-labelledby={label}
+      <div id={label + "-menu"} className="conversation-menu" popover="auto" ref={menu} role="menu" aria-labelledby={label}
         onToggle={event => setExpanded(event.newState === "open")} onKeyDown={onKeyDown}>
         <button type="button" role="menuitem" tabIndex={-1} onClick={() => {
           menu.current?.hidePopover();
