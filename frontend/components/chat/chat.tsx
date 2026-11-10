@@ -1,8 +1,9 @@
 "use client";
 
-import { ArrowUp, AudioLines, LoaderCircle } from "lucide-react";
+import { ArrowUp, LoaderCircle } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useChat } from "../../hooks/use-chat";
+import { ConversationSidebar } from "../sidebar/conversations";
 import { MessageItem } from "./message-item";
 
 const prompts = [
@@ -23,10 +24,13 @@ export function Chat() {
   }, [chat.messages, chat.pending]);
 
   return (
-    <main className="flex h-dvh min-h-0 min-w-0 flex-col bg-white">
+    <div className="grid h-dvh grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[15rem_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+    <ConversationSidebar sessions={chat.sessions} activeId={chat.session?.id} busy={chat.busy} loading={chat.loading}
+      onNew={() => { followBottom.current = true; void chat.openConversation(); }}
+      onSelect={session => { followBottom.current = true; void chat.openConversation(session); }} />
+    <main className="flex min-h-0 min-w-0 flex-col bg-white">
       <header className="flex min-h-16 items-center gap-3 border-b border-neutral-200 px-5">
-        <AudioLines className="size-5 shrink-0 text-indigo-700" aria-hidden="true" />
-        <h1 className="truncate font-semibold">{chat.session?.title ?? "Echo"}</h1>
+        <h1 className="truncate font-semibold">{chat.session?.title ?? "Conversation"}</h1>
       </header>
       <div ref={transcript} className="min-h-0 flex-1 overflow-y-auto"
         onScroll={event => {
@@ -34,7 +38,8 @@ export function Chat() {
           followBottom.current = view.scrollHeight - view.clientHeight - view.scrollTop < 80;
         }}>
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-7 px-4 py-7 sm:px-8">
-          {chat.messages.length === 0 && !chat.pending && (
+          {chat.loading && <p role="status" className="text-sm text-neutral-600">Loading conversation…</p>}
+          {!chat.loading && chat.messages.length === 0 && !chat.pending && (
             <section className="pt-8 sm:pt-14">
               <h2 className="text-2xl font-semibold tracking-tight">Start a conversation</h2>
               <p className="mt-2 text-sm text-neutral-600">Ask a question, then follow up in the same chat.</p>
@@ -86,5 +91,6 @@ export function Chat() {
         </form>
       </div>
     </main>
+    </div>
   );
 }
