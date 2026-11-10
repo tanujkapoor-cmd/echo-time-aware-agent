@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, createSession, listMessages, listSessions } from "../lib/api";
 import { streamMessage } from "../lib/sse";
 import type { ChatRequest, Citation, Message, Session } from "../lib/types";
@@ -22,6 +22,7 @@ function rememberSelection(id: string) {
 
 export function useChat() {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [previews, setPreviews] = useState<Record<string, string>>({});
   const [session, setSession] = useState<Session>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
@@ -32,9 +33,16 @@ export function useChat() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const [failedDraft, setFailedDraft] = useState<string>();
   const operation = useRef(false);
   const turn = useRef<AbortController | undefined>(undefined);
   const retry = useRef<ChatRequest | undefined>(undefined);
+
+  const showHistory = useCallback((id: string, history: Message[]) => {
+    setMessages(history);
+    const latestQuestion = history.findLast(message => message.role === "user");
+    if (latestQuestion) setPreviews(previous => ({ ...previous, [id]: latestQuestion.content }));
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -50,7 +58,7 @@ export function useChat() {
         const history = await listMessages(selected.id, signal);
         if (signal.aborted) return;
         setSession(selected);
-        setMessages(history);
+        showHistory(selected.id, history);
       } catch (failure) {
         if (!signal.aborted) setError(errorText(failure));
       } finally {
@@ -63,20 +71,21 @@ export function useChat() {
       controller.abort();
       turn.current?.abort();
     };
-  }, []);
+  }, [showHistory]);
 
   async function openConversation(target?: Session) {
     if (operation.current || loading || (target && target.id === session?.id)) return;
     operation.current = true;
     setBusy(true);
     setError(undefined);
+    setFailedDraft(undefined);
 
     try {
       const selected = target ?? await createSession();
       const history = target ? await listMessages(selected.id) : [];
       if (!target) setSessions(previous => [selected, ...previous]);
       setSession(selected);
-      setMessages(history);
+      showHistory(selected.id, history);
       setDraft("");
       retry.current = undefined;
       rememberSelection(selected.id);
@@ -97,6 +106,7 @@ export function useChat() {
     const { signal } = controller;
     setBusy(true);
     setError(undefined);
+    setFailedDraft(undefined);
     setDraft("");
 
     const saved = retry.current;
@@ -120,6 +130,7 @@ export function useChat() {
         token: chunk => setPreview(previous => previous + chunk),
       }, signal);
       retry.current = undefined;
+      setPreviews(previous => ({ ...previous, [active.id]: outgoing.content }));
       setMessages(previous => [
         ...previous.filter(item => item.id !== outgoing.id && item.id !== reply.message_id),
         outgoing,
@@ -129,7 +140,7 @@ export function useChat() {
       setPending(undefined);
 
       try {
-        setMessages(await listMessages(active.id, signal));
+        showHistory(active.id, await listMessages(active.id, signal));
       } catch (historyError) {
         if (!signal.aborted) {
           setError("Answer saved. Could not refresh conversation history. " + errorText(historyError));
@@ -137,6 +148,7 @@ export function useChat() {
       }
     } catch (sendError) {
       setDraft(text);
+      setFailedDraft(text);
       setError(signal.aborted ? "Response canceled. Send the same message again to retry." : errorText(sendError));
     } finally {
       turn.current = undefined;
@@ -150,8 +162,9 @@ export function useChat() {
   }
 
   return {
-    sessions, session, messages, draft, setDraft, pending, loading,
-    busy: busy || loading, error, send, openConversation, preview, stage, sources,
+    sessions, previews, session, messages, draft, setDraft, pending, loading,
+    busy: busy || loading, error, canRetry: !!failedDraft && failedDraft === draft.trim(),
+    send, openConversation, preview, stage, sources,
     cancel: () => turn.current?.abort(),
   };
 }
