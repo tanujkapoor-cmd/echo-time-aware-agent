@@ -1,9 +1,12 @@
+import "@fontsource-variable/manrope";
+import "@fontsource-variable/fraunces";
+import "@fontsource-variable/fraunces/wght-italic.css";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Echo",
+  title: "Echo — Research workspace",
   description: "Chat with Echo and inspect the evidence behind each answer.",
 };
 
