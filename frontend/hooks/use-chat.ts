@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createSession, listMessages, listSessions, sendMessage } from "../lib/api";
-import type { ChatRequest, Message, Session } from "../lib/types";
+import { ApiError, createSession, listMessages, listSessions } from "../lib/api";
+import { streamMessage } from "../lib/sse";
+import type { ChatRequest, Citation, Message, Session } from "../lib/types";
 
 function errorText(error: unknown) {
+  if (error instanceof ApiError && error.traceId) return error.message + " Trace ID " + error.traceId;
   return error instanceof Error ? error.message : "Something went wrong.";
 }
 
@@ -24,10 +26,14 @@ export function useChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<Message>();
+  const [preview, setPreview] = useState("");
+  const [stage, setStage] = useState<string>();
+  const [sources, setSources] = useState<Citation[]>([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const operation = useRef(false);
+  const turn = useRef<AbortController | undefined>(undefined);
   const retry = useRef<ChatRequest | undefined>(undefined);
 
   useEffect(() => {
@@ -53,7 +59,10 @@ export function useChat() {
     }
 
     void restore();
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      turn.current?.abort();
+    };
   }, []);
 
   async function openConversation(target?: Session) {
@@ -83,6 +92,9 @@ export function useChat() {
     const text = draft.trim();
     if (operation.current || loading || !text) return;
     operation.current = true;
+    const controller = new AbortController();
+    turn.current = controller;
+    const { signal } = controller;
     setBusy(true);
     setError(undefined);
     setDraft("");
@@ -96,13 +108,17 @@ export function useChat() {
     setPending(outgoing);
 
     try {
-      const active = session ?? await createSession(Array.from(text).slice(0, 64).join(""));
+      const active = session ?? await createSession(Array.from(text).slice(0, 64).join(""), signal);
       if (!session) setSessions(previous => [active, ...previous]);
       setSession(active);
       rememberSelection(active.id);
       const request = { session_id: active.id, message: text, request_id: requestId };
       retry.current = request;
-      const reply = await sendMessage(request);
+      const reply = await streamMessage(request, {
+        status: setStage,
+        sources: setSources,
+        token: chunk => setPreview(previous => previous + chunk),
+      }, signal);
       retry.current = undefined;
       setMessages(previous => [
         ...previous.filter(item => item.id !== outgoing.id && item.id !== reply.message_id),
@@ -113,15 +129,21 @@ export function useChat() {
       setPending(undefined);
 
       try {
-        setMessages(await listMessages(active.id));
+        setMessages(await listMessages(active.id, signal));
       } catch (historyError) {
-        setError("Answer saved. Could not refresh conversation history. " + errorText(historyError));
+        if (!signal.aborted) {
+          setError("Answer saved. Could not refresh conversation history. " + errorText(historyError));
+        }
       }
     } catch (sendError) {
       setDraft(text);
-      setError(errorText(sendError));
+      setError(signal.aborted ? "Response canceled. Send the same message again to retry." : errorText(sendError));
     } finally {
+      turn.current = undefined;
       setPending(undefined);
+      setPreview("");
+      setStage(undefined);
+      setSources([]);
       setBusy(false);
       operation.current = false;
     }
@@ -129,6 +151,7 @@ export function useChat() {
 
   return {
     sessions, session, messages, draft, setDraft, pending, loading,
-    busy: busy || loading, error, send, openConversation,
+    busy: busy || loading, error, send, openConversation, preview, stage, sources,
+    cancel: () => turn.current?.abort(),
   };
 }

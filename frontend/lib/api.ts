@@ -1,16 +1,18 @@
-import type { ChatReply, ChatRequest, Message, Session } from "./types";
+import type { ChatReply, ChatRequest, Citation, Message, Session } from "./types";
 
 const root = "/api/v1";
 
 export class ApiError extends Error {
-  constructor(
-    message: string,
-    public status?: number,
-    public code?: string,
-    public traceId?: string,
-  ) {
+  readonly status?: number;
+  readonly code?: string;
+  readonly traceId?: string;
+
+  constructor(message: string, status?: number, code?: string, traceId?: string) {
     super(message);
     this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+    this.traceId = traceId;
   }
 }
 
@@ -66,7 +68,16 @@ function isSession(value: unknown): value is Session {
 export function isReply(value: unknown): value is ChatReply {
   const row = record(value);
   return typeof row?.message_id === "string" && typeof row.answer === "string"
-    && row.answer.trim().length > 0 && typeof row.timestamp === "string";
+    && row.answer.trim().length > 0 && typeof row.timestamp === "string"
+    && (row.citations === undefined || (Array.isArray(row.citations) && row.citations.every(isCitation)));
+}
+
+export function isCitation(value: unknown): value is Citation {
+  const row = record(value);
+  return typeof row?.id === "string" && typeof row.title === "string" && typeof row.url === "string"
+    && typeof row.quote === "string" && typeof row.retrieved_at === "string"
+    && (row.published_at === null || typeof row.published_at === "string")
+    && (row.provenance === "live" || row.provenance === "cached" || row.provenance === "historical");
 }
 
 function isMessage(value: unknown): value is Message {

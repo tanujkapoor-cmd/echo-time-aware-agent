@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp, LoaderCircle } from "lucide-react";
+import { ArrowUp, LoaderCircle, Square } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useChat } from "../../hooks/use-chat";
 import { ConversationSidebar } from "../sidebar/conversations";
@@ -12,6 +12,17 @@ const prompts = [
   "Explain how binary search works.",
 ];
 
+const stageLabels: Record<string, string> = {
+  receive_query: "Request received",
+  load_context: "Loading context",
+  decide_search: "Checking whether search is needed",
+  execute_search: "Searching the web",
+  generate_answer: "Preparing the answer",
+  validate_response: "Validating the answer",
+  persist_memory: "Saving the turn",
+  complete: "Receiving the answer",
+};
+
 export function Chat() {
   const chat = useChat();
   const input = useRef<HTMLTextAreaElement>(null);
@@ -21,7 +32,7 @@ export function Chat() {
   useEffect(() => {
     const view = transcript.current;
     if (view && followBottom.current) view.scrollTop = view.scrollHeight;
-  }, [chat.messages, chat.pending]);
+  }, [chat.messages, chat.pending, chat.preview]);
 
   return (
     <div className="grid h-dvh grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[15rem_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
@@ -59,8 +70,11 @@ export function Chat() {
           {chat.messages.map(message => <MessageItem key={message.id} message={message} />)}
           {chat.pending && <MessageItem message={chat.pending} />}
           {chat.pending && <p role="status" className="flex items-center gap-2 text-sm text-neutral-600">
-            <LoaderCircle className="size-4 motion-safe:animate-spin" aria-hidden="true" /> Waiting for Echo…
+            <LoaderCircle className="size-4 motion-safe:animate-spin" aria-hidden="true" />
+            {chat.stage ? (stageLabels[chat.stage] ?? chat.stage) : "Waiting for Echo…"}
+            {chat.sources.length > 0 && <span>· {chat.sources.length} sources received</span>}
           </p>}
+          {chat.pending && chat.preview && <p className="whitespace-pre-wrap wrap-anywhere text-sm leading-relaxed">{chat.preview}</p>}
         </div>
       </div>
       <div className="border-t border-neutral-200 px-4 py-3">
@@ -82,10 +96,15 @@ export function Chat() {
                 }
               }}
               className="min-h-11 max-h-40 min-w-0 flex-1 resize-y rounded-md px-2 py-1.5 text-base placeholder:text-neutral-500" />
-            <button type="submit" disabled={chat.busy || !chat.draft.trim()}
+            {chat.pending ? (
+              <button type="button" onClick={chat.cancel}
+                className="flex min-h-11 items-center gap-1.5 rounded-lg border border-neutral-300 px-3 text-sm font-semibold hover:bg-neutral-100">
+                <Square className="size-3" aria-hidden="true" /> Stop
+              </button>
+            ) : <button type="submit" disabled={chat.busy || !chat.draft.trim()}
               className="flex min-h-11 items-center gap-1.5 rounded-lg bg-indigo-700 px-3 text-sm font-semibold text-white hover:bg-indigo-800 disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-600">
               <ArrowUp className="size-4" aria-hidden="true" /> Send
-            </button>
+            </button>}
           </div>
           <p className="mt-2 hidden text-xs text-neutral-600 sm:block">Enter to send · Shift+Enter for a new line</p>
         </form>
