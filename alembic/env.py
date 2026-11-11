@@ -2,7 +2,7 @@ import asyncio
 
 from alembic import context
 from echo.config import Settings
-from echo.db import Base, database
+from echo.db import Base, database, database_url
 
 url = Settings().echo_database_url
 
@@ -30,7 +30,7 @@ async def online():
 
 
 if context.is_offline_mode():
-    context.configure(url=url, target_metadata=Base.metadata, literal_binds=True)
+    context.configure(url=database_url(url), target_metadata=Base.metadata, literal_binds=True)
     with context.begin_transaction():
         context.run_migrations()
 else:

@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import AnyHttpUrl, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LLMProvider = Literal["openai", "groq"]
@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     groq_model: str = "openai/gpt-oss-20b"
     echo_database_url: str = "sqlite+aiosqlite:///./echo.db"
     echo_demo_user: str = Field("local-demo", min_length=1, max_length=128)
+    echo_public_demo: bool = False
+    echo_browser_secret: SecretStr = SecretStr("")
+    echo_frontend_origin: AnyHttpUrl | None = None
     echo_turn_timeout: float = Field(35, gt=0, le=180)
     echo_model_timeout: float = Field(12, gt=0, le=120)
     echo_search_timeout: float = Field(5, gt=0, le=60)

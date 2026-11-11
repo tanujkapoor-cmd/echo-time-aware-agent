@@ -1,0 +1,32 @@
+services:
+  - name: echo-time-aware-api
+    type: web
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install '.[postgres]'
+    startCommand: alembic upgrade head && exec uvicorn echo.main:app --host 0.0.0.0 --port "$PORT"
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.12
+      - key: ECHO_PUBLIC_DEMO
+        value: "true"
+      - key: ECHO_LLM_PROVIDER
+        value: groq
+      - key: ECHO_BROWSER_SECRET
+        generateValue: true
+      - key: GROQ_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: ECHO_DATABASE_URL
+        fromDatabase:
+          name: echo-time-aware-db
+          property: connectionString
+
+databases:
+  - name: echo-time-aware-db
+    region: oregon
+    plan: free
+    ipAllowList: []

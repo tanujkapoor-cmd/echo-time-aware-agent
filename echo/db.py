@@ -12,6 +12,7 @@ from sqlalchemy import (
     UniqueConstraint,
     event,
 )
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
@@ -118,8 +119,15 @@ class Snapshot(Base):
     sources: Mapped[list] = mapped_column(JSON)
 
 
+def database_url(value: str):
+    url = make_url(value)
+    if url.drivername in {"postgres", "postgresql"}:
+        url = url.set(drivername="postgresql+asyncpg")
+    return url
+
+
 def database(url: str):
-    engine = create_async_engine(url, pool_pre_ping=True, hide_parameters=True)
+    engine = create_async_engine(database_url(url), pool_pre_ping=True, hide_parameters=True)
     if engine.dialect.name == "sqlite":
 
         @event.listens_for(engine.sync_engine, "connect")

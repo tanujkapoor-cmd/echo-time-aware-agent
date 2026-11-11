@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from openai import AsyncOpenAI
 from sqlalchemy import select
@@ -17,8 +18,9 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from echo.agent import ChatAgent
 from echo.config import Settings
-from echo.db import Memory, Session, Turn, database, utcnow
+from echo.db import Memory, Session, Turn, database, database_url, utcnow
 from echo.errors import EchoError
+from echo.identity import BrowserIdentity, browser_identity
 from echo.llm import ChatCompletionsModel, Model
 from echo.memory import memory_view, owned_session
 from echo.schemas import (
@@ -37,7 +39,8 @@ router = APIRouter(prefix="/api/v1")
 
 
 def demo_identity(request: Request) -> str:
-    """Single local identity; this dependency is the boundary for future authentication."""
+    if key := request.app.state.browser_key:
+        return browser_identity(request, key)
     return request.app.state.settings.echo_demo_user
 
 
@@ -217,6 +220,12 @@ def create_app(
     clock: Callable[[], datetime] = utcnow,
 ) -> FastAPI:
     settings = settings or Settings()
+    browser_key = settings.echo_browser_secret.get_secret_value().encode()
+    if settings.echo_public_demo:
+        if len(browser_key) < 32:
+            raise ValueError("Public Echo requires a browser signing secret of at least 32 bytes.")
+        if database_url(settings.echo_database_url).get_backend_name() != "postgresql":
+            raise ValueError("Public Echo requires PostgreSQL for persistent storage.")
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -266,11 +275,24 @@ def create_app(
     app = FastAPI(
         title="Echo",
         version="0.1.0",
-        description="Time-aware chat and research. This instance uses a single local demo identity.",
+        description="Time-aware chat and research.",
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.state.browser_key = browser_key
     app.state.clock = clock
+    if browser_key:
+        app.add_middleware(BrowserIdentity, key=browser_key)
+    if origin := settings.echo_frontend_origin:
+        if origin.path not in (None, "/") or origin.query or origin.fragment or origin.username:
+            raise ValueError("ECHO_FRONTEND_ORIGIN must be an HTTP(S) origin without a path.")
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=[str(origin).rstrip("/")],
+            allow_credentials=True,
+            allow_methods=["GET", "POST"],
+            allow_headers=["Content-Type"],
+        )
 
     @app.exception_handler(EchoError)
     async def service_error(request: Request, exc: EchoError):
