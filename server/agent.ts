@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { citeComparison, compare, ground, historicalCitations, renderCitations, summarizeComparison } from "./evidence.ts";
 import { publicUrl, safeQuery } from "./providers.ts";
-import type { Model, SearchProvider } from "./providers.ts";
+import type { Model, SearchPlan, SearchProvider } from "./providers.ts";
 import { canSaveMemory, forceSearch, freshness, historicalWindow, overlap, refersBack, route, terms, timezone } from "./routing.ts";
 import type { MemoryUpdate, Store } from "./store.ts";
 import { ServiceError } from "./types.ts";
@@ -64,7 +64,8 @@ function selectSnapshot(message: string, session: string, ctx: Context, target: 
   }
   if (!terms(message).length || refersBack.test(message)) {
     const local = ctx.snapshots.find(snapshot => snapshot.session_id === session);
-    if (local) return local;
+    if (local && (!target || !terms(target.question).length ||
+        overlap(target.question, local.question + " " + local.topic_key))) return local;
     if (!ctx.recent.length && !terms(message).length &&
         new Set(ctx.snapshots.map(snapshot => snapshot.topic_key)).size === 1) return ctx.snapshots[0];
   }
@@ -76,6 +77,11 @@ function previousAnswer(turn: Turn): string {
   const answer = turn.response.answer.replace(/\[((?:S|H)\d+)\]/g,
     (_, id: string) => ids.has(id) ? "[" + ids.get(id) + "]" : "");
   return answer.split("\n").map(line => "> " + line).join("\n");
+}
+
+function recall(turn: Turn, date: string): string {
+  return "On " + date + ", you asked:\n\n> " + turn.question.replace(/\n/g, "\n> ") +
+    "\n\nI replied:\n\n" + previousAnswer(turn);
 }
 
 function modelAnswer(answer: string): string {
@@ -103,6 +109,28 @@ function remembered(updates: MemoryUpdate[], question: string): MemoryUpdate[] {
 function validHits(hits: SearchHit[]): SearchHit[] {
   return hits.filter(hit => publicUrl(hit.url) && hit.title.trim() && hit.snippet.trim() &&
     Number.isFinite(Date.parse(hit.retrieved_at)));
+}
+
+function queryTasks(plan: SearchPlan, message: string, budget: number) {
+  const planned = [...new Set([plan.query, ...plan.additional_queries].filter(safeQuery))];
+  const sites = [...new Set([...message.matchAll(/(?:^|\s|\()(?:https?:\/\/)?((?:[a-z\d-]+\.)+[a-z]{2,})\/[a-z\d][\w/-]*/gi)]
+    .map(match => match[1].toLowerCase().replace(/^www\./, ""))
+    .filter(domain => domain.length <= 253 && publicUrl("https://" + domain)))];
+  if (sites.length < 2 || sites.length > budget || freshness(message) !== "market") {
+    return planned.slice(0, budget).map(query => ({ query, domain: undefined }));
+  }
+
+  // A multi-vendor request names the scope even if the model omitted one of the searches.
+  return sites.slice(0, budget).map(domain => {
+    const vendor = domain.split(".")[0];
+    const scopedPlan = planned.find(query => {
+      const keywords = terms(query);
+      return keywords.includes(vendor) && sites.every(other => other === domain || !keywords.includes(other.split(".")[0]));
+    });
+    const prefix = "site:" + domain + " ";
+    const query = prefix + (scopedPlan ?? vendor + " official plan pricing").slice(0, 400 - prefix.length);
+    return { query, domain };
+  });
 }
 
 export class Agent {
@@ -151,7 +179,7 @@ export class Agent {
     const replay = await this.store.replay(input.session_id, requestId, input.message);
     if (replay) return replay;
     const ctx = await this.store.context(user, input.session_id, window,
-      historic ? terms(input.message) : []);
+      historic && !window ? terms(input.message) : [], { snapshots: checking, memories: kind === "chat" });
     const candidates = window ? ctx.dated : [...new Map([...ctx.recent, ...ctx.related].map(turn => [turn.id, turn])).values()];
     let target = historic ? selectTarget(input.message, candidates,
       Boolean(window)) : undefined;
@@ -162,6 +190,8 @@ export class Agent {
     timing.memory_ms += performance.now() - started;
     const hasBaseline = Boolean(target || baseline);
     const baseTime = baseline?.retrieved_at ?? target?.asked_at ?? null;
+    const staticRecheck = checking && target && !baseline && freshness(input.message) === "general" &&
+      /^(?:explain|define|how does|what is (?:a|an))\b/i.test(target.question) && route(target.question) === "chat";
     const recent = [...ctx.recent].reverse().map(contextTurn);
     const relevantMemories = ctx.memories.filter(memory => overlap(input.message, memory.key + " " + memory.content));
     const activeMemory = (relevantMemories.length ? relevantMemories : canSaveMemory(input.message) ? ctx.memories.slice(0, 8) : [])
@@ -186,14 +216,24 @@ export class Agent {
     } else if (kind === "history" || (checking && !hasBaseline)) {
       if (target) {
         reply.citations = historicalCitations(target.response.citations);
-        reply.answer = "On " + this.localDate(target.asked_at, zone) + ", you asked:\n\n> " +
-          target.question.replace(/\n/g, "\n> ") + "\n\nI replied:\n\n" + previousAnswer(target);
+        reply.answer = recall(target, this.localDate(target.asked_at, zone));
         reply.memory_used = true;
         reply.evidence_mode = "historical";
       } else {
         reply.answer = checking ? "Which earlier answer should I check? Tell me the topic or when you asked."
           : "I couldn’t find an earlier question to recall. What topic or date should I look for?";
       }
+    } else if (staticRecheck && target) {
+      update("generate_answer");
+      const draft = await infer(() => this.model.chat({
+        question: input.message, conversation: [contextTurn(target)], extract_memory: false,
+        task: "Re-evaluate the saved general explanation. Correct any error you identify. Use your existing knowledge.",
+      }, deadline));
+      const answer = modelAnswer(draft.answer);
+      if (!answer) throw new ServiceError("model_unavailable", "The model returned an empty reply. Try again.", 503);
+      reply.answer = recall(target, this.localDate(target.asked_at, zone)) + "\n\n" + answer;
+      reply.memory_used = true;
+      reply.evidence_mode = "historical";
     } else if (kind === "search" || checking) {
       const research = await this.research(input.message, checking, asked, baseline, target, ctx, reply,
         deadline, infer, update, zone);
@@ -240,27 +280,30 @@ export class Agent {
     const force = checking || forceSearch(message);
     const ttl = this.options.ttl[freshness(message + " " + (publicQuery ?? ""))];
     const budget = this.options.searchCalls;
-    const exact = baseline && !terms(message).length && !/\bpricing|prices|product updates\b/i.test(message) &&
+    const exact = baseline && freshness(baseline.question) !== "market" &&
+      !terms(message).length && !/\b(pricing|prices|product updates)\b/i.test(message) &&
       new Set(baseline.claims.map(claim => claim.subject.toLowerCase())).size <= 1 && safeQuery(publicQuery ?? "");
     const plan = exact && publicQuery
       ? { query: publicQuery, max_results: this.options.searchResults, additional_queries: [] }
       : await infer(() => this.model.plan({
         question: message, prior_public_query: publicQuery, earlier_turn: prior,
-        conversation: refersBack.test(message) || checking ? ctx.recent.slice(0, 5).reverse().map(contextTurn) : [],
+        conversation: !prior && (refersBack.test(message) || checking)
+          ? ctx.recent.slice(0, 5).reverse().map(contextTurn) : [],
         prior_subjects: baseline?.claims.map(claim => ({ subject: claim.subject, attribute: claim.attribute, scope: claim.scope })),
         budget, today: this.localDate(asked.toISOString(), zone),
       }, signal));
 
-    const queries = [...new Set([plan.query, ...plan.additional_queries].filter(safeQuery))].slice(0, budget);
+    const scopedMessage = checking && !terms(message).length && baseline ? baseline.question : message;
+    const queries = queryTasks(plan, scopedMessage, budget);
     if (!queries.length) throw new ServiceError("invalid_search_plan", "Echo couldn’t form a public search query.", 503);
     update("execute_search");
     const searchStart = performance.now();
     const count = Math.min(plan.max_results, this.options.searchResults);
-    const keys = queries.map(query => query.toLowerCase().replace(/\s+/g, " ") + "\n" + count);
+    const keys = queries.map(({ query }) => query.toLowerCase().replace(/\s+/g, " ") + "\n" + count);
     const entries = keys.map(key => this.cache.get(key));
     const allCached = !force && entries.every(entry => entry && entry.until > asked.getTime() &&
       entry.hits.every(hit => Date.parse(hit.retrieved_at) + ttl > asked.getTime()));
-    const batches = await Promise.all(queries.map(async (query, index) => {
+    const batches = await Promise.all(queries.map(async ({ query, domain }, index) => {
       const key = keys[index];
       const cached = entries[index];
       if (allCached && cached) {
@@ -271,7 +314,11 @@ export class Agent {
       reply.timing.search_calls++;
       reply.timing.provider_calls++;
       try {
-        const hits = validHits(await this.provider.search(query, count, signal)).slice(0, count);
+        const hits = validHits(await this.provider.search(query, count, signal)).filter(hit => {
+          if (!domain) return true;
+          const host = publicUrl(hit.url)?.hostname ?? "";
+          return host === domain || host.endsWith("." + domain);
+        }).slice(0, count);
         if (hits.length && this.options.cacheSize && ttl) {
           this.cache.delete(key);
           this.cache.set(key, { hits, until: this.clock().getTime() + ttl });
@@ -301,8 +348,7 @@ export class Agent {
 
     const archival = checking && target ? historicalCitations(target.response.citations) : [];
     const prefix = checking && target && /\bwhat (?:did|had) i ask\b/i.test(message)
-      ? "On " + this.localDate(target.asked_at, zone) + ", you asked:\n\n> " +
-        target.question.replace(/\n/g, "\n> ") + "\n\nI replied:\n\n" + previousAnswer(target) + "\n\n"
+      ? recall(target, this.localDate(target.asked_at, zone)) + "\n\n"
       : "";
     const baselineNote = checking && reply.baseline_at
       ? "\n\nI used the check from " + this.localDate(reply.baseline_at, zone) + " as the reference." : "";
@@ -347,9 +393,9 @@ export class Agent {
     reply.evidence_mode = citations.length ? (cached ? "cached_snippets" : "live_snippets") : "insufficient";
     if (!citations.length || cached || (checking && !claims.length)) return;
     const latest = new Date(Math.max(...sources.map(source => Date.parse(source.retrieved_at)))).toISOString();
-    const topic = baseline?.topic_key ?? (terms(queries.join(" ")).join(" ") || queries[0]).slice(0, 180);
+    const topic = baseline?.topic_key ?? (terms(queries.map(item => item.query).join(" ")).join(" ") || queries[0].query).slice(0, 180);
     return {
-      id: reply.message_id, user_id: "", session_id: "", question: message, topic_key: topic, search_query: queries[0],
+      id: reply.message_id, user_id: "", session_id: "", question: message, topic_key: topic, search_query: queries[0].query,
       asked_at: asked.toISOString(), retrieved_at: latest, expires_at: new Date(Date.parse(latest) + ttl).toISOString(),
       answer_summary: reply.answer, claims, sources,
     };

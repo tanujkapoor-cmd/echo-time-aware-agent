@@ -142,3 +142,39 @@ test("C: last Tuesday selects the PostgreSQL discussion and compares only matchi
     assert(reply.citations.some(source => source.provenance === "historical"));
   } finally { await app.close(); }
 });
+
+test("a pricing recheck with conversational history alone reports the missing evidence", async () => {
+  const fixture = harness("2026-11-10T23:00:00Z");
+  const app = await fixture.open("sqlite:///:memory:");
+  try {
+    const one = await session(app);
+    await send(app, one.id, "We decided to evaluate Render Basic for Postgres hosting.");
+    fixture.at("2026-11-16T12:00:00Z");
+    const current = price("Render", "Basic", 22, "https://render.com/pricing", "instance");
+    fixture.plans.push(plan("Render Basic Postgres hosting prices"));
+    fixture.searches.set("Render Basic Postgres hosting prices", [current.source]);
+    fixture.results.push(draft([current]));
+    const two = await session(app);
+    const reply = await send(app, two.id, "Last Tuesday I asked you about Postgres hosting. Has any pricing changed since then?");
+    assert.match(reply.answer, /don’t have comparable evidence saved/);
+    assert.equal(reply.changes[0].kind, "insufficient");
+    assert.equal(reply.timing.search_calls, 1);
+  } finally { await app.close(); }
+});
+
+test("a dated recheck of a general explanation does not search", async () => {
+  const fixture = harness("2026-11-03T15:00:00Z");
+  const app = await fixture.open("sqlite:///:memory:");
+  try {
+    const one = await session(app);
+    fixture.drafts.push({ answer: "A prime has exactly two positive divisors.", memories: [] });
+    await send(app, one.id, "What is a prime number?");
+    fixture.at("2026-11-11T12:00:00Z");
+    fixture.drafts.push({ answer: "That definition still holds.", memories: [] });
+    const two = await session(app);
+    const reply = await send(app, two.id, "What did I ask you on 3 November? Is your answer still correct today?");
+    assert.match(reply.answer, /exactly two positive divisors/);
+    assert.match(reply.answer, /still holds/);
+    assert.equal(reply.timing.search_calls, 0);
+  } finally { await app.close(); }
+});

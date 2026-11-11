@@ -18,7 +18,7 @@ export interface PriceScope {
   plan: string;
   currency: string;
   billing: "monthly" | "annual" | "hourly" | "usage";
-  unit: "seat" | "project" | "instance" | "organization" | "usage";
+  unit: "seat" | "project" | "instance" | "organization" | "request" | "compute_hour" | "gb" | "gb_month";
   market: string | null;
 }
 

@@ -1,9 +1,14 @@
 import type { NextConfig } from "next";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+
+const project = process.cwd();
+const workspace = dirname(project);
 
 const config: NextConfig = {
   agentRules: false,
   devIndicators: false,
-  turbopack: { root: process.cwd() },
+  turbopack: { root: existsSync(join(workspace, "package-lock.json")) ? workspace : project },
   async rewrites() {
     const configured = process.env.NEXT_PUBLIC_API_BASE_URL;
     if (process.env.VERCEL_ENV === "production" && !configured) {

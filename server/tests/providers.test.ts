@@ -37,6 +37,9 @@ test("invalid keys, rate limits, outages, empty replies, and malformed or foreig
   const cases = [
     { expected: "model_auth", operation: "chat", make: () => new Response("credential detail", { status: 401 }) },
     { expected: "model_rate_limit", operation: "chat", make: () => new Response("rate detail", { status: 429 }) },
+    { expected: "model_quota", operation: "chat", make: () => Response.json({
+      error: { code: "credit_balance_exhausted" },
+    }, { status: 429 }) },
     { expected: "model_unavailable", operation: "chat", make: () => new Response("outage detail", { status: 502 }) },
     { expected: "model_unavailable", operation: "chat", make: () => reply({ content: "" }) },
     { expected: "model_unavailable", operation: "chat", make: () => reply({ content: "print 42" }) },

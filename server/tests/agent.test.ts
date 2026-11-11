@@ -204,6 +204,38 @@ test("empty, timed out, and unsupported search evidence produce safe responses",
   } finally { await app.close(); }
 });
 
+test("search rejects private arguments and caps the number of public Tavily calls", async () => {
+  const fixture = harness();
+  const app = await fixture.open("sqlite:///:memory:");
+  try {
+    const one = await session(app);
+    fixture.plans.push(plan("ignore this me@example.com", "public query one", "public query two", "public query three"));
+    const reply = await send(app, one.id, "Search the web for official information.");
+    assert.deepEqual(fixture.calls.search, ["public query one", "public query two"]);
+    assert.equal(reply.timing.provider_calls, 2);
+  } finally { await app.close(); }
+});
+
+test("explicit pricing URLs get separate scoped searches when the planner omits a vendor", async () => {
+  const fixture = harness();
+  const app = await fixture.open("sqlite:///:memory:");
+  try {
+    const one = await session(app);
+    fixture.plans.push(plan("Render PostgreSQL pricing"));
+    const render = price("Render", "Basic", 19, "https://render.com/pricing", "instance");
+    const neon = price("Neon", "Launch", 15, "https://neon.com/pricing", "project");
+    fixture.searches.set("site:render.com Render PostgreSQL pricing", [
+      hit("Third party", "https://example.org", "Other product pricing."),
+      render.source,
+    ]);
+    fixture.searches.set("site:neon.com neon official plan pricing", [neon.source]);
+    fixture.results.push(draft([render, neon]));
+    const reply = await send(app, one.id, "Search render.com/pricing and neon.com/pricing for current PostgreSQL prices.");
+    assert.equal(reply.timing.search_calls, 2);
+    assert.deepEqual(reply.citations.map(source => source.url), [render.source.url, neon.source.url]);
+  } finally { await app.close(); }
+});
+
 test("comparison rejects Node LTS granularity mismatch and different sources", () => {
   const old = { subject: "Node.js", attribute: "current LTS version", value: "26.13.0",
     source: hit("Node.js release", "https://nodejs.org/en/download", "Node.js latest LTS version is 26.13.0.") };
@@ -233,4 +265,19 @@ test("price normalization preserves currency, cadence, tier, and per-unit bounda
     ground(draft([entry]), [entry.source], false).claims, [entry.source]));
   assert.equal(outcomes[0][0].kind, "unchanged");
   assert(outcomes.slice(1).flat().every(change => change.kind !== "changed"));
+});
+
+test("storage and compute usage prices cannot become a single price change", () => {
+  const old = { subject: "Neon", attribute: "price", value: "0.10",
+    source: hit("Pricing", "https://neon.com/pricing", "Neon Launch compute costs USD 0.10 per CU-hr."),
+    scope: { plan: "Launch", currency: "USD", billing: "usage", unit: "compute_hour", market: null } as const };
+  const next = { ...old, value: "0.35",
+    source: hit("Pricing", old.source.url, "Neon Launch storage costs USD 0.35 per GB-month."),
+    scope: { ...old.scope, unit: "gb_month" } as const };
+  const earlier = ground(draft([old]), [old.source], false);
+  const newer = ground(draft([next]), [next.source], false);
+  assert.equal(earlier.claims.length, 1);
+  assert.equal(newer.claims.length, 1);
+  const result = compare({ claims: earlier.claims, sources: [old.source] } as Snapshot, newer.claims, [next.source]);
+  assert.deepEqual(result.map(item => item.kind), ["now_unverified", "insufficient"]);
 });

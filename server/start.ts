@@ -47,7 +47,7 @@ export function agentConfig(): AgentSettings {
 }
 
 export function searchProvider(clock: () => Date) {
-  return new Tavily(process.env.TAVILY_API_KEY?.trim() ?? "", milliseconds("ECHO_SEARCH_TIMEOUT", 5_000, 60), clock);
+  return new Tavily(process.env.TAVILY_API_KEY?.trim() ?? "", milliseconds("ECHO_SEARCH_TIMEOUT", 8_000, 60), clock);
 }
 
 export async function start() {

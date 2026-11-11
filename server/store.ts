@@ -208,7 +208,8 @@ export class Store {
     return row ? turnRow(row) : undefined;
   }
 
-  async context(user: string, session: string, window: [string, string] | null, terms: string[]) {
+  async context(user: string, session: string, window: [string, string] | null, terms: string[],
+    include: { snapshots: boolean; memories: boolean }) {
     const dateFilter = window ? " AND t.asked_at >= ? AND t.asked_at < ?" : "";
     const dates = window ? window.map(value => this.stamp(value)) : [];
     const [recent, dated, related, snapshots, memories] = await Promise.all([
@@ -220,10 +221,10 @@ export class Store {
         "SELECT t.* FROM turns t JOIN sessions s ON t.session_id = s.id WHERE s.user_id = ? AND (" +
         terms.slice(0, 5).map(() => "LOWER(t.question) LIKE ?").join(" OR ") +
         ") ORDER BY t.asked_at DESC, t.id LIMIT 24", [user, ...terms.slice(0, 5).map(term => "%" + term + "%")]) : [],
-      this.query<Snapshot>("SELECT * FROM snapshots WHERE user_id = ?" +
+      include.snapshots ? this.query<Snapshot>("SELECT * FROM snapshots WHERE user_id = ?" +
         (window ? " AND asked_at >= ? AND asked_at < ?" : "") +
-        " ORDER BY retrieved_at DESC, id LIMIT 120", [user, ...dates]),
-      this.memories(user, null, false, 24, 0),
+        " ORDER BY retrieved_at DESC, id LIMIT 120", [user, ...dates]) : [],
+      include.memories ? this.memories(user, null, false, 24, 0) : [],
     ]);
     return { recent: recent.map(turnRow), dated: dated.map(turnRow), related: related.map(turnRow),
       snapshots: snapshots.map(snapshotRow), memories };

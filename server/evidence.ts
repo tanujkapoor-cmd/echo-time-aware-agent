@@ -36,22 +36,26 @@ function isPrice(attribute: string): boolean { return /\b(price|pricing|cost)\b/
 function scopeSupported(scope: PriceScope | null, quote: string): boolean {
   if (!scope || !/^[A-Z]{3}$/.test(scope.currency) || !literal(quote, scope.currency) ||
       !scope.plan.trim() || !literal(quote, scope.plan) ||
-      (scope.market && !literal(quote, scope.market))) return false;
+      (scope.market && !literal(quote, scope.market)) ||
+      /\b(?:typical|estimated|average) (?:spend|cost)\b/i.test(quote)) return false;
   const annual = /\b(?:billed annually|annual(?:ly)? billing|per year|\/\s*yr|yearly|annual(?:ly)?)\b/i;
   const billing = {
     annual,
     monthly: /\b(?:billed monthly|monthly|per month)\b|\/\s*mo\b/i,
     hourly: /\b(?:hourly|per hour)\b|\/\s*h(?:r)?\b/i,
-    usage: /\b(?:per request|per GB|per compute hour|usage.based)\b/i,
+    usage: /\b(?:per request|per GB|per compute hour|per CU.hr|usage.based)\b/i,
   };
   const unit = {
     seat: /\b(?:per |\/\s*)(?:user|seat|agent)\b/i,
     project: /\b(?:per |\/\s*)project\b/i,
     instance: /\b(?:per |\/\s*)(?:instance|database)\b/i,
     organization: /\b(?:per |\/\s*)(?:org(?:anization)?|team|workspace)\b/i,
-    usage: /\b(?:per request|per GB|per compute hour|usage.based)\b/i,
+    request: /\bper requests?\b/i,
+    compute_hour: /\bper (?:CU[- ]?hr|compute hour)\b/i,
+    gb: /\bper GB\b(?![- ]?month)/i,
+    gb_month: /\bper GB[- ]?month\b/i,
   };
-  return billing[scope.billing].test(quote) && unit[scope.unit].test(quote) &&
+  return Boolean(billing[scope.billing]?.test(quote) && unit[scope.unit]?.test(quote)) &&
     (scope.billing !== "monthly" || !annual.test(quote));
 }
 
@@ -84,7 +88,7 @@ export function ground(draft: ResearchDraft, sources: SearchHit[], cached: boole
     const quote = flat(witness.quote);
     if (!hit || quote.length < 18 || quote.length > 520 || !publicUrl(hit.url) ||
         !flat(hit.snippet).includes(quote) ||
-        /https?:\/\/|\[(?:S|H)\d+\]|ignore .{0,40}instructions|system prompt|tool call|print\s+42|<\s*\/?[a-z]/i.test(quote)) return;
+        /https?:\/\/|\[(?:S|H)\d+\]|ignore .{0,40}instructions|system prompt|tool call|<\s*\/?[a-z]/i.test(quote)) return;
     const key = canonical(hit.url) + "\n" + quote;
     if (!accepted.has(key)) accepted.set(key, cite(hit, quote, "S" + (accepted.size + 1), cached ? "cached" : "live"));
     return hit;

@@ -25,11 +25,11 @@ const research = await post<{ id: string }>("sessions", { title: "Echo live audi
 const cases = [
   { name: "binary-search", session: basic.id, message: "How would binary search find 5 in [1, 3, 5, 7, 9]?", search: false, check: /middle|index/i },
   { name: "context-setup", session: basic.id, message: "My transit feed refreshes every 15 minutes. How should I show freshness?", search: false },
-  { name: "context-followup", session: basic.id, message: "When should I label the data as stale? Use the refresh interval above.", search: false, check: /15 minutes/i },
+  { name: "context-followup", session: basic.id, message: "When should I label the data as stale? Use the refresh interval above.", search: false, check: /15\s+minutes/i },
   { name: "official-release", session: research.id, message: "What is the latest stable Python release? Cite the official Python downloads page.", search: true, domains: ["python.org"] },
   { name: "release-recheck", session: research.id, message: "Has anything changed since I last asked?", search: true },
   { name: "no-history", session: research.id, message: "What did I ask you on 3 November 2010? Is your answer still correct today?", search: false, check: /saved question/i },
-  { name: "postgres-pricing", session: research.id, message: "Search the web for current Render PostgreSQL and Neon prices. Prefer official provider pricing pages and include plan and billing details where available.", search: true, domains: ["render.com", "neon.com"] },
+  { name: "postgres-pricing", session: research.id, message: "Search render.com/pricing for Render PostgreSQL pricing and neon.com/pricing for Neon pricing. Use a separate query for each and include plan and billing details where available.", search: true, domains: ["render.com", "neon.com"] },
   { name: "short-explanation", session: basic.id, message: "Explain a database index in two sentences.", search: false, check: /index/i },
   { name: "simple-reasoning", session: basic.id, message: "What is the sum of the first five positive integers?", search: false, check: /\b15\b/ },
   { name: "context-recall", session: basic.id, message: "What did I tell you about my transit feed?", search: false, check: /15 minutes/i },
