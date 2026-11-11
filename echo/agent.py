@@ -37,7 +37,15 @@ from echo.routing import (
     topic_key,
     volatility,
 )
-from echo.schemas import ChatInput, ChatView, Citation, EvidenceMode, SearchStatus, Timing
+from echo.schemas import (
+    ChangeKind,
+    ChatInput,
+    ChatView,
+    Citation,
+    EvidenceMode,
+    SearchStatus,
+    Timing,
+)
 from echo.search import Batch, SearchInput, SearchResult, SearchService
 from echo.telemetry import event, ms
 
@@ -364,27 +372,45 @@ class ChatAgent:
             )
             return Result(answer, [], mode, memories=draft.memories)
 
-        grounded = ground(draft.excerpts, draft.facts, research.hits, research.cached)
+        comparison = decision.route == Route.COMPARE
+        previous = stored_claims(baseline) if comparison else []
+        grounded = ground(
+            draft.excerpts,
+            draft.facts,
+            research.hits,
+            research.cached,
+            previous=previous if not research.cached else None,
+        )
         if not grounded.citations:
             research.status = SearchStatus.UNSUPPORTED
             return _no_evidence(research.status, baseline, decision)
-        title = (
-            "From saved search excerpts (not checked again this turn):"
-            if research.cached
-            else "From search excerpts retrieved for this turn:"
-        )
         current = grounded.claims
-        if decision.route == Route.COMPARE:
-            changes = compare(stored_claims(baseline), current if not research.cached else [])
+        if comparison:
+            changes = compare(
+                previous,
+                current if not research.cached else [],
+                earlier_snippets={
+                    source.url: source.snippet
+                    for source in map(SearchResult.model_validate, baseline.sources)
+                }
+                if baseline
+                else None,
+            )
         else:
-            changes = [item for item in compare([], current) if item.kind.value == "conflicting"]
+            changes = [item for item in compare([], current) if item.kind == ChangeKind.CONFLICTING]
         citations = [*grounded.citations, *(_historical_citations(baseline) if changes else [])]
         notes = describe_changes(changes, citations)
-        if notes and baseline:
-            notes = f"Compared with evidence retrieved {baseline.retrieved_at.isoformat(timespec='seconds')}.\n{notes}"
+        answer = notes or grounded.render()
+        if notes and any(item.kind == ChangeKind.INSUFFICIENT for item in changes):
+            answer += "\n\n" + grounded.render()
+        if baseline and notes:
+            stamp = baseline.retrieved_at.strftime("%b %d, %Y at %H:%M UTC")
+            answer += f"\n\nThe earlier check was on {stamp}."
+        elif research.cached:
+            answer += "\n\nI used saved search results for this answer."
         mode = EvidenceMode.CACHED_SNIPPETS if research.cached else EvidenceMode.LIVE_SNIPPETS
         return Result(
-            (notes + "\n\n" if notes else "") + title + "\n" + grounded.render(),
+            answer,
             citations,
             mode,
             changes=changes,

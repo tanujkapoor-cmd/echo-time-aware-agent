@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import select
 
 from echo.db import Snapshot
+from echo.evidence import Witness
 from echo.llm import ToolCall
 from evals.fakes import FakeModel, FakeSearch, draft, interview, release, release_draft, tool
 
@@ -21,6 +22,7 @@ async def test_foundation_restart_and_idempotency(settings, clock):
         assert (await client.get("/api/v1/health")).json() == {"status": "ok"}
         sid = await session(client, "Mathematics")
         first = await send(client, sid, "What is a prime number?", request_id=request_id)
+        assert first["answer"] == "A prime has exactly two positive divisors."
         assert first["timing"]["model_calls"] == 1
         assert not first["web_search_used"] and not first["memory_used"]
         assert first["evidence_mode"] == "model_knowledge"
@@ -61,13 +63,15 @@ async def test_new_version_preserves_old_snapshot_and_recall(settings, clock):
         first = await send(client, sid, "What is the latest stable Python release?")
         assert first["evidence_mode"] == "live_snippets"
         assert first["citations"][0]["url"] == old.url
+        assert first["answer"] == f"“{old.snippet}” [S1]"
         clock.now = new.retrieved_at
         later = await send(client, sid, "Has anything changed?")
         assert later["search_status"] == "live" and later["memory_used"]
         assert later["baseline_at"] == first["citations"][0]["retrieved_at"]
         assert later["changes"][0]["kind"] == "changed"
         assert "3.14.0 to 3.14.1" in later["answer"]
-        assert "[H1] [S1]" in later["answer"].split("\n")[1]
+        assert "[H1] [S1]" in later["answer"]
+        assert "The earlier check was on Jan 05, 2026 at 12:00 UTC." in later["answer"]
         assert {item["provenance"] for item in later["citations"]} == {"live", "historical"}
         assert len(provider.calls) == 2
         assert (
@@ -83,6 +87,57 @@ async def test_new_version_preserves_old_snapshot_and_recall(settings, clock):
         assert "3.14.0" in archived["answer"] and "3.14.1" not in archived["answer"]
         assert archived["citations"][0]["provenance"] == "historical"
         assert len(provider.calls) == 2
+
+
+async def test_recheck_cites_conflicting_result_the_model_omitted(settings, clock):
+    old = release(clock, "3.14.0")
+    clock.now += timedelta(days=1)
+    new = release(clock, "3.14.1")
+    dissent = release(clock, "3.14.0", "other.example")
+    provider = FakeSearch([old], [new, dissent])
+    model = FakeModel(answers=[release_draft(old), release_draft(new)], tools=[tool(), tool()])
+    app = app_for(settings, clock, model, provider)
+    async with app.router.lifespan_context(app), client_for(app) as client:
+        sid = await session(client)
+        clock.now = old.retrieved_at
+        await send(client, sid, "What is the latest stable Python release?")
+        clock.now = new.retrieved_at
+        reply = await send(client, sid, "Has anything changed?")
+        change = reply["changes"][0]
+        assert change["kind"] == "conflicting"
+        assert {claim["value"] for claim in change["current"]} == {"3.14.0", "3.14.1"}
+        assert "excerpts disagree" in reply["answer"]
+        assert {item["url"] for item in reply["citations"] if item["provenance"] == "live"} == {
+            new.url,
+            dissent.url,
+        }
+
+
+async def test_recheck_does_not_call_a_different_quote_from_the_same_listing_a_change(
+    settings, clock
+):
+    old = release(clock, "3.14.0")
+    clock.now += timedelta(days=1)
+    new = release(clock, "3.14.1").model_copy(update={"url": old.url})
+    listing = old.model_copy(update={"snippet": f"{old.snippet}\n{new.snippet}"})
+    first_draft = release_draft(old)
+    second_fact = first_draft.facts[0].model_copy(
+        update={
+            "value": "3.14.1",
+            "witness": Witness(source_id="R1", quote=new.snippet),
+        }
+    )
+    model = FakeModel(answers=[first_draft, draft(facts=[second_fact])], tools=[tool(), tool()])
+    app = app_for(settings, clock, model, FakeSearch([listing], [new]))
+    async with app.router.lifespan_context(app), client_for(app) as client:
+        sid = await session(client)
+        clock.now = old.retrieved_at
+        await send(client, sid, "What is the latest stable Python release?")
+        clock.now = new.retrieved_at
+        reply = await send(client, sid, "Has anything changed?")
+        assert [change["kind"] for change in reply["changes"]] == ["insufficient"]
+        assert "earlier search already contained the current quote" in reply["answer"]
+        assert "[H1] [S1]" in reply["answer"]
 
 
 async def test_followup_without_search_and_ambiguous_research(settings, clock):

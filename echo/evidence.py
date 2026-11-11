@@ -45,14 +45,19 @@ def _valid_witness(witness: Witness, sources: dict[str, SearchResult]) -> Search
         or not witness.quote.strip()
         or re.search(r"\[(?:S|H)\d+\]", witness.quote, re.I)
         or re.search(r"https?://|www\.", witness.quote, re.I)
-        or " ".join(witness.quote.split()) not in " ".join(source.snippet.split())
+        or not _quote_in(witness.quote, source.snippet)
     ):
         return None
     return source
 
 
 def ground(
-    witnesses: list[Witness], facts: list[FactDraft], sources: dict[str, SearchResult], cached: bool
+    witnesses: list[Witness],
+    facts: list[FactDraft],
+    sources: dict[str, SearchResult],
+    cached: bool,
+    *,
+    previous: list[Claim] | None = None,
 ) -> Grounding:
     accepted: dict[tuple[str, str], Citation] = {}
     claims = []
@@ -70,8 +75,7 @@ def ground(
                 provenance="cached" if cached else "live",
             )
 
-    # Consider comparison evidence first so each accepted claim is visible and citable.
-    for fact in facts[:8]:
+    def accept_fact(fact: FactDraft):
         source = _valid_witness(fact.witness, sources)
         if (
             not source
@@ -81,7 +85,7 @@ def ground(
             or not _contains(fact.value, fact.witness.quote)
             or not _contains(fact.subject, fact.witness.quote)
         ):
-            continue
+            return
         claims.append(
             Claim(
                 subject=fact.subject.strip(),
@@ -93,6 +97,42 @@ def ground(
             )
         )
         cite(fact.witness, source)
+
+    # Consider comparison evidence first so each accepted claim is visible and citable.
+    for fact in facts[:8]:
+        accept_fact(fact)
+
+    # Extraction can omit an opposing result. Reuse a known claim only if its
+    # exact witness appears in a current result and an extracted claim disagrees.
+    for claim in previous or []:
+        if len(accepted) >= 8:
+            break
+        if not 18 <= len(claim.quote) <= 460:
+            continue
+        if not any(
+            _claim_key(candidate) == _claim_key(claim)
+            and normalized(candidate.value) != normalized(claim.value)
+            for candidate in claims
+        ):
+            continue
+        for source_id, source in sources.items():
+            if len(accepted) >= 8:
+                break
+            if _quote_in(claim.quote, source.snippet) and not any(
+                _claim_key(candidate) == _claim_key(claim)
+                and normalized(candidate.value) == normalized(claim.value)
+                and candidate.source_url == source.url
+                for candidate in claims
+            ):
+                witness = Witness(source_id=source_id, quote=claim.quote)
+                accept_fact(
+                    FactDraft(
+                        subject=claim.subject,
+                        attribute=claim.attribute,
+                        value=claim.value,
+                        witness=witness,
+                    )
+                )
     for witness in witnesses[:5]:
         if len(accepted) >= 8:
             break
@@ -101,15 +141,25 @@ def ground(
     return Grounding(list(accepted.values()), claims)
 
 
+def _quote_in(quote: str, snippet: str) -> bool:
+    return " ".join(quote.split()) in " ".join(snippet.split())
+
+
+def _claim_key(claim: Claim) -> tuple[str, str]:
+    return normalized(claim.subject), normalized(claim.attribute)
+
+
 def _group(claims: list[Claim]):
     result = defaultdict(dict)
     for claim in claims:
-        key = (normalized(claim.subject), normalized(claim.attribute))
+        key = _claim_key(claim)
         result[key][(normalized(claim.value), claim.source_url)] = claim
     return {key: list(group.values()) for key, group in result.items()}
 
 
-def compare(previous: list[Claim], current: list[Claim]) -> list[Change]:
+def compare(
+    previous: list[Claim], current: list[Claim], *, earlier_snippets: dict[str, str] | None = None
+) -> list[Change]:
     old = _group(previous)
     new = _group(current)
     changes = []
@@ -127,6 +177,10 @@ def compare(previous: list[Claim], current: list[Claim]) -> list[Change]:
             kind = ChangeKind.NEW if old else ChangeKind.INSUFFICIENT
         elif before == after:
             kind = ChangeKind.UNCHANGED
+        elif earlier_snippets and all(
+            _quote_in(item.quote, earlier_snippets.get(item.source_url, "")) for item in present
+        ):
+            kind = ChangeKind.INSUFFICIENT
         else:
             kind = ChangeKind.CHANGED
         item = (present or past)[0]
@@ -150,24 +204,24 @@ def describe_changes(changes: list[Change], citations: list[Citation]) -> str:
         for citation in citations
     }
     lines = []
-    if any(item.kind == ChangeKind.INSUFFICIENT for item in changes):
-        lines.append(
-            "The evidence is insufficient to determine whether the previous answer changed."
-        )
+    if any(item.kind == ChangeKind.INSUFFICIENT and not item.previous for item in changes):
+        lines.append("I couldn’t verify whether the earlier answer changed.")
     for item in changes:
-        if item.kind == ChangeKind.INSUFFICIENT:
+        if item.kind == ChangeKind.INSUFFICIENT and not item.previous:
             continue
-        label = f"{item.subject} — {item.attribute}"
+        label = f"the reported {item.attribute} for {item.subject}"
         if item.kind == ChangeKind.CHANGED:
-            line = f"{label}: the reported value changed from {item.previous[0].value} to {item.current[0].value}."
+            line = f"The reported {item.attribute} for {item.subject} changed from {item.previous[0].value} to {item.current[0].value}."
         elif item.kind == ChangeKind.UNCHANGED:
-            line = f"{label}: comparable excerpts still report {item.current[0].value}."
+            line = f"The sources still report {item.current[0].value} for {item.subject} ({item.attribute})."
         elif item.kind == ChangeKind.NEW:
-            line = f"{label}: now reported as {item.current[0].value}; no comparable earlier claim was saved."
+            line = f"The sources report {item.current[0].value} for {item.subject} ({item.attribute}). I don’t have an earlier value to compare."
         elif item.kind == ChangeKind.NOW_UNVERIFIED:
-            line = f"{label}: the earlier claim was not verified in this check."
+            line = f"I couldn’t verify {label} in this check."
+        elif item.kind == ChangeKind.INSUFFICIENT:
+            line = f"The earlier search already contained the current quote, so I can’t verify a change in {label}."
         else:
-            line = f"{label}: excerpts disagree; a single value could not be established."
+            line = f"The excerpts disagree about {label}, so I can’t confirm a single value."
         refs = dict.fromkeys(
             labels.get((claim.source_url, claim.quote, historical))
             for historical, claims in ((True, item.previous), (False, item.current))

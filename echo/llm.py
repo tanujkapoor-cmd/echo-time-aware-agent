@@ -77,7 +77,10 @@ Leave answer empty; free-form prose is ignored in this mode. Put comparable fact
 with stable subject/attribute names, copying existing baseline keys only if the fact measures
 the same thing (same units, version channel, entity, and time scope). Each fact requires
 an exact quote containing its literal value; don't extract values from ambiguous, superseded,
-or negated statements. Omit facts without direct support. Return empty lists if evidence fails.
+or negated statements. For each attribute, return all directly supported competing values as
+separate facts with the same subject and attribute. An old version on a downloads page is not
+evidence that it is still the latest release. Omit facts without direct support. Return empty
+lists if evidence fails.
 
 If no sources are provided: answer directly without claiming web verification or adding
 links/citation markers. Preserve dates when referring to past replies; past replies can be
