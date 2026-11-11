@@ -2,7 +2,7 @@
 
 **A time-aware AI chat agent that remembers your questions and checks what has changed.**
 
-[Live demo](https://echo-time-aware-agent.vercel.app/) · [Feature walkthrough](docs/feature-walkthrough.md) · [Technical design](design.md) · [Verification](VERIFICATION.md)
+[Hosted preview](https://echo-time-aware-agent.vercel.app/) · [Feature walkthrough](docs/feature-walkthrough.md) · [Technical design](DESIGN.md) · [Minimi evaluation](docs/MINIMI_EVALUATION_REPORT.md)
 
 ## Overview
 
@@ -50,7 +50,7 @@ Echo was built for the minimi engineering challenge. Ask a question, follow up w
 
 ## How Echo works
 
-1. **Load context.** The FastAPI backend retrieves recent turns, relevant saved details, and earlier research for the conversation.
+1. **Load context.** The Node.js API retrieves recent turns, relevant saved details, and earlier research. The browser timezone determines the date window for questions like “What did I ask on 3 November?”
 2. **Route the question.** The language model answers general questions directly. Questions that need current evidence can use Tavily, Echo’s web search tool.
 3. **Check the evidence.** Echo validates source excerpts, attaches citations, and compares matching claims with the earlier research when the user asks for a recheck.
 4. **Save and stream.** Echo saves the new turn and any research or memory updates. The Next.js workspace receives progress and the answer over server-sent events.
@@ -58,7 +58,7 @@ Echo was built for the minimi engineering challenge. Ask a question, follow up w
 ~~~mermaid
 flowchart LR
     B[Browser] --> N[Next.js chat workspace]
-    N -->|Same-origin REST and SSE| A[FastAPI]
+    N -->|Same-origin REST and SSE| A[Fastify on Node.js]
     A --> R[Routing and context]
     R -->|Read history, memory and snapshots| D[(PostgreSQL or local SQLite)]
     R -->|Plan search or generate answer| M[Groq or OpenAI]
@@ -69,7 +69,7 @@ flowchart LR
     G -->|Progress and saved reply| A
 ~~~
 
-Groq hosts the default model in the example configuration. The same adapter supports OpenAI. The backend stores chat and research in PostgreSQL in production or SQLite locally. [Technical design](design.md)
+Groq hosts the default model. The adapter also supports OpenAI. The API uses SQLite locally and supports PostgreSQL for hosted storage. [Technical design](DESIGN.md)
 
 ## Why Echo is different
 
@@ -77,27 +77,14 @@ An earlier answer is a reference point you can return to. Echo keeps the evidenc
 
 ## Run locally
 
-Use Python 3.12 or later and Node.js 22.18 or later. Run the backend commands from the repository root. On Windows, activate with `.\.venv\Scripts\Activate.ps1` and copy the example with `Copy-Item .env.example .env`.
+Use Node.js 22.18 or later. From the repository root, copy `.env.example` to `.env` and set `GROQ_API_KEY` and `TAVILY_API_KEY`. On Windows, use `Copy-Item .env.example .env`.
 
 ~~~bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[dev]'
-cp .env.example .env
-# Set GROQ_API_KEY and TAVILY_API_KEY in .env.
-python -m alembic upgrade head
-python -m uvicorn echo.main:app --host 127.0.0.1 --port 8000
-~~~
-
-In another terminal:
-
-~~~bash
-cd frontend
-npm ci
+npm install
 npm run dev
 ~~~
 
-Open the [chat workspace](http://127.0.0.1:3000/) or the [API reference](http://127.0.0.1:8000/docs). FastAPI exposes database health at `GET /api/v1/health`.
+Open the [chat workspace](http://127.0.0.1:3000/). The command starts both Node processes and creates the local SQLite database on first run. The API serves health at [port 8000](http://127.0.0.1:8000/api/v1/health). If either port is occupied, set `ECHO_WEB_PORT` or `ECHO_API_PORT` in the shell before running the dev command.
 
 | Variable | Where to set it | Purpose |
 | --- | --- | --- |
@@ -105,7 +92,7 @@ Open the [chat workspace](http://127.0.0.1:3000/) or the [API reference](http://
 | `GROQ_API_KEY`, `GROQ_MODEL` | Backend | Groq credential and optional model override. The example uses `openai/gpt-oss-20b`. |
 | `OPENAI_API_KEY`, `OPENAI_MODEL` | Backend | Credential and model override when using OpenAI. |
 | `TAVILY_API_KEY` | Backend | Web search credential. |
-| `ECHO_DATABASE_URL` | Backend | Defaults to local SQLite. Install `.[postgres]` to use PostgreSQL. |
+| `ECHO_DATABASE_URL` | Backend | Defaults to `sqlite:///./echo.db`. Set a PostgreSQL connection URL to use PostgreSQL. |
 | `ECHO_PUBLIC_DEMO`, `ECHO_BROWSER_SECRET` | Backend | Public mode requires PostgreSQL and a signing secret of at least 32 bytes. The secret keeps anonymous browser histories separate. |
 | `ECHO_FRONTEND_ORIGIN` | Backend | Exact HTTPS frontend origin for direct browser CORS access. |
 | `NEXT_PUBLIC_API_BASE_URL` | Frontend | Backend origin for the Next.js rewrite. Defaults to loopback locally and is required on Vercel production builds. |
@@ -115,36 +102,27 @@ Keep provider keys and signing credentials in the backend environment. Next.js f
 ## Try it
 
 1. Start a chat and send “My interview is on Friday.” Then send “Actually, my interview was moved to Monday.”
-2. Start a new chat in the same browser and ask “What is my interview plan?” A successful extraction and correction lets Echo recall Monday. Open **Agent Inspector → Saved memory** to see the active plan and the superseded record. Ambiguous statements can be skipped.
-3. In a research chat, ask “What is the latest stable Python release?” Follow up with “Has anything changed since I last asked?” Inspect both replies to compare their retrieval dates and source excerpts. The result depends on the evidence available at the time.
+2. Start a new chat in the same browser and ask “What is my interview plan?” Open **Agent Inspector → Saved memory** to see the active plan and the superseded record when Echo extracted the correction.
+3. Ask “What is the latest stable Python release? Cite python.org.” Then ask “Has anything changed since I last asked?” Inspect the recheck to see the earlier retrieval time and new evidence. The verdict depends on the sources available when you try it.
 
 ## Test and evaluate
 
 ~~~bash
-python -m ruff format --check .
-python -m ruff check .
-python -m pytest -q
-python -m evals.run
-
-cd frontend
-npm run typecheck
-npm run lint -- --max-warnings 0
 npm test
+npm run eval
+npm run lint
 npm run build
+npm run typecheck
 ~~~
 
-Backend tests use real migrations and controlled model and search responses. They exercise persistence, routing, citation validation, temporal comparison, memory correction, and SSE. The evaluation runner reports passed scenarios, provider and tool calls, and measured p50 and p95 local HTTP latency. Fixture latency excludes real provider network and inference time. [Verification details](VERIFICATION.md)
+The fixture evaluation covers the Monday CRM shortlist, the 3 November recall, and the last-Tuesday PostgreSQL hosting recheck. With a running app and provider keys, `npm run eval:live` measures response latency and call counts over real API requests. Set `ECHO_EVAL_PAUSE_MS` to space requests for a provider with a small quota. [Evaluation and limitations](docs/MINIMI_EVALUATION_REPORT.md)
 
 ## Deployment
 
-[Open Echo on Vercel](https://echo-time-aware-agent.vercel.app/) or check the [Render API health endpoint](https://echo-time-aware-api-gb19.onrender.com/api/v1/health).
-
-The deployment pairs a Vercel Next.js project rooted at `frontend/` with a Render FastAPI service and managed PostgreSQL. The [Render Blueprint](render.yaml) wires the database connection into FastAPI, runs Alembic before Uvicorn, and configures the health endpoint. Use the deployed backend origin for the Vercel rewrite and the frontend origin for backend CORS. Each browser receives a signed, secure cookie so its saved sessions and memory are isolated from other visitors.
-
-Render’s free service can cold-start after inactivity. Free Render PostgreSQL is suitable for a time-limited hiring demo and expires after 30 days. Longer retention requires a database that does not expire. [Render free-tier limits](https://render.com/docs/free)
+The [Render Blueprint](render.yaml) runs the Node.js API and connects PostgreSQL. Set `NEXT_PUBLIC_API_BASE_URL` in the Vercel frontend project to the deployed API origin. The hosted API requires a signing secret and uses a signed, secure cookie to isolate browser histories. See the evaluation report for the status of the existing live demo.
 
 ## Limitations and next steps
 
-The public demo uses anonymous browser identity, so clearing cookies or switching browsers loses access to that history. It has no account sign-in or deletion UI. PostgreSQL ranks a bounded recent set of rows and can miss older matches. Routing is primarily English, search coverage depends on Tavily, and a matching excerpt does not establish source credibility. The Inspector can show that Echo used context, but the API does not link individual saved memories to a reply.
+The public demo uses anonymous browser identity, so clearing cookies or switching browsers loses access to that history. Topic lookup and model context are bounded. Routing is primarily English, and search coverage depends on Tavily. A matching excerpt establishes what a source said. Confirming a change also depends on comparable evidence being available.
 
-Future work includes account authentication and retention controls, a PostgreSQL search index, stronger entity and unit normalization, and a labeled real-provider evaluation set. See [design.md](design.md) for the routing, storage, and evidence tradeoffs.
+Future work includes account authentication, retention controls, stronger source ranking, and a labeled live evaluation set. [Design tradeoffs](DESIGN.md)

@@ -1,15 +1,15 @@
 services:
   - name: echo-time-aware-api
     type: web
-    runtime: python
+    runtime: node
     plan: free
     region: oregon
-    buildCommand: pip install '.[postgres]'
-    startCommand: alembic upgrade head && exec uvicorn echo.main:app --host 0.0.0.0 --port "$PORT"
+    buildCommand: npm ci --omit=dev --workspaces=false
+    startCommand: npm run start:api
     healthCheckPath: /api/v1/health
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.12.12
+      - key: NODE_VERSION
+        value: 22.18.0
       - key: ECHO_PUBLIC_DEMO
         value: "true"
       - key: ECHO_LLM_PROVIDER
