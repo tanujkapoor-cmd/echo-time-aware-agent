@@ -10,10 +10,16 @@
   --subtle: #62636e;
   --line: #e9e8ee;
   --line-strong: #d9d7e1;
-  --coral: #b73e33;
-  --accent-text: #a33429;
-  --accent-soft: #fceeea;
-  --accent-line: #ecc8c2;
+  --lilac: #6741a5;
+  --lilac-hover: #523087;
+  --lilac-line: #dfd3ef;
+  --lilac-wash: #f8f4fc;
+  --accent-text: var(--lilac);
+  --accent-soft: var(--lilac-wash);
+  --accent-line: var(--lilac-line);
+  --error-text: #a33429;
+  --error-surface: #fceeea;
+  --error-line: #ecc8c2;
   --shadow: 0 7px 25px rgb(37 26 52 / 8%);
   --sans: "Manrope Variable", system-ui, sans-serif;
   --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
@@ -31,7 +37,7 @@ button:not(:disabled), summary { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 
 :focus-visible {
-  outline: 2px solid var(--coral);
+  outline: 2px solid var(--lilac);
   outline-offset: 3px;
 }
 
@@ -81,8 +87,8 @@ button:disabled { cursor: not-allowed; }
   width: .38rem;
   height: .38rem;
   border-radius: 50%;
-  background: var(--coral);
-  box-shadow: 0 0 12px rgb(183 62 51 / 25%);
+  background: var(--lilac);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--lilac) 25%, transparent);
 }
 
 .message-body {
@@ -101,7 +107,7 @@ button:disabled { cursor: not-allowed; }
 .message-body hr { border-color: var(--line); }
 .message-body blockquote {
   padding-inline-start: .85rem;
-  border-inline-start: 2px solid var(--coral);
+  border-inline-start: 2px solid var(--lilac);
   color: var(--muted);
 }
 

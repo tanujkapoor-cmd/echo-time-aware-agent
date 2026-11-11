@@ -25,6 +25,7 @@
 }
 
 .inspector-tabs button:hover { color: var(--accent-text); }
+.inspector-tabs button svg, .inspector-date svg { color: var(--accent-text); }
 .inspector-tabs button:active { transform: scale(.98); }
 .inspector-tabs button[aria-pressed="true"] { background: var(--panel); border-color: var(--line); color: var(--text); }
 .inspector-view, .memory-timeline { animation: workspace-in var(--motion-card) var(--motion-curve) both; }

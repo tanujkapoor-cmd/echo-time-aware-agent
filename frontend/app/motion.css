@@ -20,7 +20,7 @@
 .conversation-link:active:not(:disabled) { transform: scale(.987); }
 .conversation-link::before {
   content: ""; position: absolute; inset: 29% auto 29% 0; width: 2px;
-  border-radius: 1px; background: var(--coral); opacity: 0; transform: scaleY(.25);
+  border-radius: 1px; background: var(--lilac); opacity: 0; transform: scaleY(.25);
   transition: opacity var(--motion-hover), transform var(--motion-card) var(--motion-curve);
 }
 .conversation-link[aria-current="true"]::before { opacity: 1; transform: scaleY(1); }

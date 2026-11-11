@@ -1,9 +1,6 @@
 :root {
   --workspace-frame: #eee8f5;
   --workspace-rail: #f5f4f6;
-  --lilac: #6741a5;
-  --lilac-line: #dfd3ef;
-  --lilac-wash: #f8f4fc;
 }
 
 .echo-app {
@@ -172,9 +169,6 @@
   transition: border-color var(--motion-hover), background var(--motion-hover);
 }
 .composer-ideas:hover:not(:disabled) { border-color: var(--lilac); }
-.workspace[data-welcome] .send-button { background: var(--lilac); }
-.workspace[data-welcome] .send-button:hover:not(:disabled) { background: #523087; }
-.workspace[data-welcome] .send-button:disabled { background: var(--lilac-wash); color: var(--lilac); }
 .workspace[data-welcome] .composer-foot {
   display: flex;
   margin-top: .26rem;
