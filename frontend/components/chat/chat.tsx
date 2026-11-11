@@ -5,7 +5,7 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { answerKey, useChat } from "../../hooks/use-chat";
 import { createDraftStore } from "../../lib/draft";
 import type { Session } from "../../lib/types";
-import { AgentInspector } from "../inspector/agent-inspector";
+import { AgentInspector, type InspectorView } from "../inspector/agent-inspector";
 import { ConversationSidebar } from "../sidebar/conversations";
 import { SideDrawer } from "../workspace/side-drawer";
 import { Composer } from "./composer";
@@ -34,13 +34,15 @@ export function Chat() {
   const [showJump, setShowJump] = useState(false);
   const [inspectedId, setInspectedId] = useState<string>();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState<boolean>();
+  const [inspectorView, setInspectorView] = useState<InspectorView>("activity");
   const [drawer, setDrawer] = useState<"conversations" | "inspector">();
   const [conversationView, setConversationView] = useState(0);
   const closeDrawer = useCallback(() => setDrawer(undefined), []);
   const inspected = chat.messages.find(item => item.id === inspectedId)?.response
     ?? chat.messages.findLast(item => item.response)?.response ?? undefined;
   const welcoming = !chat.loading && chat.messages.length === 0 && !chat.pending;
+  const inspectorVisible = inspectorOpen ?? !!chat.messages.length;
   const pendingKey = chat.pending && answerKey(chat.pending.id);
   const visibleMessages: typeof chat.messages = chat.pending && pendingKey ? [...chat.messages, chat.pending, {
     id: pendingKey, role: "assistant", content: chat.preview, timestamp: chat.pending.timestamp,
@@ -70,16 +72,22 @@ export function Chat() {
     setInspectedId(undefined);
     closeDrawer();
     if (await chat.openConversation(session)) {
+      if (!session) setInspectorOpen(undefined);
       setShowJump(false);
       setConversationView(previous => previous + 1);
     }
   }
 
-  const inspect = useCallback((messageId: string) => {
-    setInspectedId(messageId);
+  const openInspector = useCallback((view: InspectorView) => {
+    setInspectorView(view);
     if (window.matchMedia("(min-width: 1200px)").matches) setInspectorOpen(true);
     else setDrawer("inspector");
   }, []);
+
+  const inspect = useCallback((messageId: string) => {
+    setInspectedId(messageId);
+    openInspector("activity");
+  }, [openInspector]);
 
   const sidebar = {
     sessions: chat.sessions,
@@ -89,30 +97,40 @@ export function Chat() {
     loading: chat.loading,
     onNew: () => openConversation(),
     onSelect: openConversation,
+    onMemory: () => openInspector("memory"),
   };
 
   return (
-    <div className="echo-app" data-sidebar-open={sidebarOpen} data-inspector-open={inspectorOpen}>
+    <div className="echo-app" data-sidebar-open={sidebarOpen} data-inspector-open={inspectorVisible}>
       <aside className="sidebar-shell" id="desktop-conversations" data-collapsed={!sidebarOpen || undefined}>
-        <ConversationSidebar {...sidebar} collapsed={!sidebarOpen} />
+        <ConversationSidebar {...sidebar} collapsed={!sidebarOpen} onCollapse={() => {
+          setSidebarOpen(false);
+          requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(".desktop-conversations-toggle")?.focus());
+        }} />
       </aside>
       <main className="workspace" data-welcome={welcoming || undefined}>
         <header className="workspace-bar">
           <div className="workspace-path">
-            <button type="button" className="icon-button desktop-conversations-toggle"
-              aria-label={sidebarOpen ? "Collapse conversations" : "Expand conversations"}
+            <button type="button" className="icon-button desktop-conversations-toggle" hidden={sidebarOpen}
+              aria-label="Expand conversations"
               aria-expanded={sidebarOpen} aria-controls="desktop-conversations"
               onClick={() => setSidebarOpen(open => !open)}><PanelLeft size={19} aria-hidden="true" /></button>
             <button type="button" className="icon-button mobile-conversations-toggle"
               aria-label="Open conversations" aria-haspopup="dialog"
               onClick={() => setDrawer("conversations")}><PanelLeft size={20} aria-hidden="true" /></button>
-            <span className="mobile-echo" aria-hidden="true"><AudioLines size={18} /> Echo</span>
-            <span className="workspace-root">Workspace</span><ChevronRight className="workspace-chevron" size={14} aria-hidden="true" />
-            <h1>{chat.session?.title ?? (chat.messages.length ? "Untitled conversation" : "New conversation")}</h1>
+            {welcoming ? (
+              <h1 className="workspace-home"><span className="echo-mark"><AudioLines size={14} aria-hidden="true" /></span> Echo</h1>
+            ) : (
+              <>
+                <span className="mobile-echo" aria-hidden="true"><AudioLines size={18} /> Echo</span>
+                <span className="workspace-root">Workspace</span><ChevronRight className="workspace-chevron" size={14} aria-hidden="true" />
+                <h1>{chat.session?.title ?? (chat.messages.length ? "Untitled conversation" : "New conversation")}</h1>
+              </>
+            )}
           </div>
           <button type="button" ref={inspectorToggle} className="inspector-toggle desktop-inspector-toggle"
-            aria-expanded={inspectorOpen} aria-controls="desktop-inspector"
-            onClick={() => setInspectorOpen(open => !open)}>
+            aria-expanded={inspectorVisible} aria-controls="desktop-inspector"
+            onClick={() => setInspectorOpen(!inspectorVisible)}>
             <PanelRight size={16} aria-hidden="true" /> <span>Inspector</span>
           </button>
           <button type="button" className="inspector-toggle mobile-inspector-toggle"
@@ -149,6 +167,7 @@ export function Chat() {
           </div>
           <Composer input={input} draft={draft} busy={chat.busy} sending={!!chat.pending} welcoming={welcoming}
             error={chat.error} failedDraft={chat.failedDraft} onStop={chat.cancel}
+            onSuggestions={() => document.querySelector<HTMLButtonElement>("#suggested-questions button")?.focus()}
             onSend={() => {
               if (chat.busy || !draft.read().trim()) return;
               followBottom.current = true;
@@ -161,8 +180,9 @@ export function Chat() {
             onPrompt={prompt => { draft.write(prompt); input.current?.focus(); }} />}
         </div>
       </main>
-      <aside className="inspector-shell" id="desktop-inspector" inert={!inspectorOpen}>
-        <AgentInspector reply={inspected} visible={inspectorOpen && drawer !== "inspector"} onClose={() => {
+      <aside className="inspector-shell" id="desktop-inspector" inert={!inspectorVisible}>
+        <AgentInspector reply={inspected} visible={inspectorVisible && drawer !== "inspector"}
+          view={inspectorView} onView={setInspectorView} onClose={() => {
           setInspectorOpen(false);
           inspectorToggle.current?.focus();
         }} />
@@ -171,7 +191,8 @@ export function Chat() {
         <ConversationSidebar {...sidebar} onClose={closeDrawer} />
       </SideDrawer>
       <SideDrawer open={drawer === "inspector"} side="right" label="Agent Inspector" desktopAt={1200} onClose={closeDrawer}>
-        <AgentInspector reply={inspected} onClose={closeDrawer} visible={drawer === "inspector"} drawer />
+        <AgentInspector reply={inspected} onClose={closeDrawer} visible={drawer === "inspector"}
+          view={inspectorView} onView={setInspectorView} drawer />
       </SideDrawer>
     </div>
   );

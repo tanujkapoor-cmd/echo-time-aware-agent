@@ -1,6 +1,4 @@
 .transcript-column { animation: workspace-in var(--motion-card) var(--motion-curve) both; }
-.workspace[data-welcome]::before { animation: welcome-glow 540ms var(--motion-curve) both; }
-@keyframes welcome-glow { from { opacity: .45; } }
 .transcript-frame { position: relative; display: flex; flex: 1; min-width: 0; min-height: 0; }
 .workspace[data-welcome] .transcript-frame, .workspace[data-welcome] .transcript { flex: none; width: 100%; }
 .message[data-entering] { animation: workspace-in var(--motion-card) var(--motion-curve) both; }

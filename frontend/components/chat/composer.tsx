@@ -1,8 +1,8 @@
-import { ArrowUp, AudioLines, CircleAlert, CornerDownLeft, RotateCcw, Square } from "lucide-react";
+import { ArrowUp, CircleAlert, CornerDownLeft, RotateCcw, Sparkles, Square } from "lucide-react";
 import { useLayoutEffect, useRef, useSyncExternalStore, type RefObject } from "react";
 import type { DraftStore } from "../../lib/draft";
 
-export function Composer({ input, draft, busy, sending, welcoming, error, failedDraft, onSend, onStop }: {
+export function Composer({ input, draft, busy, sending, welcoming, error, failedDraft, onSend, onStop, onSuggestions }: {
   input: RefObject<HTMLTextAreaElement | null>;
   draft: DraftStore;
   busy: boolean;
@@ -12,6 +12,7 @@ export function Composer({ input, draft, busy, sending, welcoming, error, failed
   failedDraft?: string;
   onSend: () => void;
   onStop: () => void;
+  onSuggestions: () => void;
 }) {
   const value = useSyncExternalStore(draft.subscribe, draft.read, draft.read);
   const mirror = useRef<HTMLDivElement>(null);
@@ -38,12 +39,11 @@ export function Composer({ input, draft, busy, sending, welcoming, error, failed
           </button>}
         </div>}
         <div className="composer" data-sending={sending || undefined}>
-          {welcoming && <span className="composer-tag" aria-hidden="true"><AudioLines size={15} /> Ask Echo</span>}
           <label htmlFor="message" className="sr-only">Message</label>
           <div className="composer-field">
             <div className="composer-mirror" ref={mirror} aria-hidden="true">{value + "\u200b"}</div>
             <textarea id="message" ref={input} rows={1} maxLength={4000} value={value}
-              readOnly={busy} placeholder="Message Echo"
+              readOnly={busy} placeholder={welcoming ? "Ask Echo anything…" : "Message Echo"}
               onChange={event => draft.write(event.target.value)}
               onKeyDown={event => {
                 if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -52,6 +52,10 @@ export function Composer({ input, draft, busy, sending, welcoming, error, failed
                 }
               }} />
           </div>
+          <div className="composer-actions">
+          {welcoming && <button type="button" className="composer-ideas" onClick={onSuggestions} disabled={busy}>
+            <Sparkles size={15} aria-hidden="true" /> Prompt ideas
+          </button>}
           {sending
             ? <button type="button" className="stop-button" onClick={event => { event.preventDefault(); onStop(); }}>
               <Square size={13} aria-hidden="true" /> Stop
@@ -59,6 +63,7 @@ export function Composer({ input, draft, busy, sending, welcoming, error, failed
             : <button type="submit" className="send-button" aria-label="Send" disabled={busy || !value.trim()}>
               <ArrowUp size={19} aria-hidden="true" />
             </button>}
+          </div>
         </div>
         <div className="composer-foot">
           <span><CornerDownLeft size={12} aria-hidden="true" /> Enter to send <span className="shortcut-extra">· Shift + Enter for a new line</span></span>

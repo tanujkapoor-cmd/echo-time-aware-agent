@@ -1,5 +1,4 @@
 import { Activity, ArrowUpRight, Clock3, Fingerprint, Globe2, History, Layers, Link2, PanelRightClose, X } from "lucide-react";
-import { useState } from "react";
 import { formatTimestamp, webLink } from "../../lib/presentation";
 import type { ChatReply, Citation } from "../../lib/types";
 import { CopyButton } from "../workspace/copy-button";
@@ -42,13 +41,16 @@ function Source({ source }: { source: Citation }) {
   );
 }
 
-export function AgentInspector({ reply, onClose, drawer, visible }: {
+export type InspectorView = "activity" | "memory";
+
+export function AgentInspector({ reply, onClose, drawer, visible, view, onView }: {
   reply?: ChatReply;
   onClose: () => void;
   drawer?: boolean;
   visible: boolean;
+  view: InspectorView;
+  onView: (view: InspectorView) => void;
 }) {
-  const [view, setView] = useState<"activity" | "memory">("activity");
   return (
     <div className="inspector-panel">
       <header className="inspector-head">
@@ -62,10 +64,10 @@ export function AgentInspector({ reply, onClose, drawer, visible }: {
         </button>
       </header>
       <div className="inspector-tabs" role="group" aria-label="Inspector view">
-        <button type="button" aria-pressed={view === "activity"} onClick={() => setView("activity")}>
+        <button type="button" aria-pressed={view === "activity"} onClick={() => onView("activity")}>
           <Activity size={14} aria-hidden="true" /> Reply activity
         </button>
-        <button type="button" aria-pressed={view === "memory"} onClick={() => setView("memory")}>
+        <button type="button" aria-pressed={view === "memory"} onClick={() => onView("memory")}>
           <Layers size={14} aria-hidden="true" /> Saved memory
         </button>
       </div>
