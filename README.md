@@ -1,23 +1,59 @@
 # Echo
 
-**A time-aware AI chat agent with intelligent web search, persistent conversational memory, and evidence-backed change detection.**
+**A time-aware AI chat agent that remembers your questions and checks what has changed.**
 
-Echo was built for the minimi engineering challenge. When a user asks whether an earlier answer still holds, Echo identifies the prior research, looks for fresh evidence, and compares the two observations. It keeps the dates and sources visible so the user can tell what was known then and what can be verified now.
+[Live demo](https://echo-time-aware-agent.vercel.app/) · [Feature walkthrough](docs/feature-walkthrough.md) · [Technical design](design.md) · [Verification](VERIFICATION.md)
 
-![Echo’s welcome workspace with a Three.js orb, composer, and suggested questions](docs/echo-workspace.jpg)
+## Overview
 
-*The running Echo app with a fixture conversation in the sidebar.*
+Echo was built for the minimi engineering challenge. Ask a question, follow up without repeating the setup, or come back later to check whether an earlier answer still holds. Echo keeps conversation history and dated research so you can see what it checked and when.
 
-[Live demo](https://echo-time-aware-agent.vercel.app/) · [Feature walkthrough and screenshots](docs/feature-walkthrough.md) · [Technical design](design.md) · [Verification and evaluation](VERIFICATION.md)
+## Key features
 
-## What Echo does
+- **Quick replies.** Everyday questions go straight to the language model. Echo uses Tavily when a question needs current information.
+- **Follow-ups that carry context.** Echo saves each turn and can use details from earlier messages in the same conversation. You can ask “When should I label the data as stale?” without restating which data feed you mean.
+- **Temporal memory.** Echo records when you asked and when it retrieved evidence. On a recheck, it compares the saved result with fresh sources and flags conflicts or gaps in the evidence.
+- **Grounded answers.** Citations link current claims to their sources. The supporting excerpts are available in the Agent Inspector.
+- **Inspectable replies.** Open the Agent Inspector to see whether Echo used search or memory, how long the reply took, and which sources it used.
 
-- **Remembers conversations and explicit user details.** Conversations persist across restarts. Echo can recall a dated turn, retrieve a saved plan across conversations, and keep the previous value when a plan is corrected.
-- **Searches when the question needs current evidence.** Rules route simple chat and personal recall away from search. For current questions, the model can call a single tool, `web_search`, backed by Tavily.
-- **Compares evidence over time.** A recheck uses the original research snapshot as a baseline. Echo reports a change, agreement, conflict, or insufficient evidence according to what the retrieved excerpts support.
-- **Shows its work in the Agent Inspector.** Inspect any saved answer to see search and memory usage, timings, trace ID, source excerpts, retrieval dates, and previous and current evidence. The Saved memory tab shows active and superseded records.
+## Product tour
 
-## Architecture
+### Landing page
+
+![Echo's welcome screen with a message composer, three suggested prompts, and a conversation sidebar](docs/images/landing-page.webp)
+
+*The welcome screen offers prompts for a current fact, a memory question, or a general topic.*
+
+### Chat in action
+
+![Echo explaining binary search with a short worked example](docs/images/chat-response.webp)
+
+*Echo answers a general question about binary search directly from the model.*
+
+### Context-aware follow-up
+
+![Echo uses the earlier 15-minute transit feed interval to answer when the data becomes stale](docs/images/context-followup.webp)
+
+*Echo carries the earlier 15-minute refresh interval into the follow-up and marks the reply “Context used.”*
+
+### Temporal comparison
+
+![Echo rechecks the Python release, cites fresh results, and reports that it could not verify a change](docs/images/temporal-comparison.webp)
+
+*Echo rechecks the Python release, cites the latest search result, and gives the time of the earlier check. In this run it couldn’t verify a change.*
+
+### Agent Inspector
+
+![Agent Inspector showing search activity, memory use, source citations, and the earlier check's timestamp](docs/images/agent-inspector.webp)
+
+*The Inspector shows that the recheck used search and memory, plus the earlier retrieval time, source details, and trace ID.*
+
+## How Echo works
+
+1. **Load context.** The FastAPI backend retrieves recent turns, relevant saved details, and earlier research for the conversation.
+2. **Route the question.** The language model answers general questions directly. Questions that need current evidence can use Tavily, Echo’s web search tool.
+3. **Check the evidence.** Echo validates source excerpts, attaches citations, and compares matching claims with the earlier research when the user asks for a recheck.
+4. **Save and stream.** Echo saves the new turn and any research or memory updates. The Next.js workspace receives progress and the answer over server-sent events.
 
 ~~~mermaid
 flowchart LR
@@ -33,14 +69,11 @@ flowchart LR
     G -->|Progress and saved reply| A
 ~~~
 
-The frontend uses Next.js, React, TypeScript, and CSS. The backend uses Python, FastAPI, Pydantic, SQLAlchemy, and Alembic. Groq hosts the default model in the example configuration. The same adapter supports OpenAI.
+Groq hosts the default model in the example configuration. The same adapter supports OpenAI. The backend stores chat and research in PostgreSQL in production or SQLite locally. [Technical design](design.md)
 
-1. **Load context.** Echo reads a bounded set of turns, active memories, research snapshots, and the session revision. It releases the database connection before calling a provider.
-2. **Route the turn.** Rules distinguish general chat, recall, current facts, contextual follow-ups, and comparisons. An ambiguous reference may require a structured resolver call.
-3. **Retrieve and validate.** The tool planner proposes a bounded public query. The backend enforces a two-call maximum, validates exact quoted excerpts against the source pool, and uses comparable claims to determine what changed. Explicit rechecks bypass the cache.
-4. **Commit and deliver.** A short transaction writes the turn and any new memory or research snapshot. Server-sent events report progress during processing, then deliver the validated answer in fragments and a final saved response. Retrying with the same request ID can recover an already committed turn.
+## Why Echo is different
 
-Echo stores when the user made a statement and when it was recorded. A memory correction must quote the user’s message and identify the active record it replaces. Research snapshots separately store when sources were retrieved and when those results expire. A failed or unsupported recheck leaves the older result available as history and reports that the current claim could not be verified.
+An earlier answer is a reference point you can return to. Echo keeps the evidence from the earlier check alongside what it finds on a recheck. It can report agreement, a change, or uncertainty, and you can open the Inspector to see why.
 
 ## Run locally
 

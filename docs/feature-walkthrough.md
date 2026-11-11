@@ -23,10 +23,12 @@ For a repeatable conflict check, run `python -m pytest -q tests/test_api.py -k r
 
 ## Live demo screenshots
 
-Echo answers a current question with a citation. The Inspector shows that it searched the web and when it retrieved the source.
+Echo cites python.org for the release check. When asked what changed, it looks up the earlier check and searches again. In this run, Echo surfaced the new citation and the earlier timestamp, and reported that it couldn’t verify a change.
 
-![Echo answering a Python release question with a python.org citation and search activity in the Inspector](echo-search-inspector.jpg)
+![Two turns from the live Python release check, with a source citation and the time of the earlier check](images/temporal-comparison.webp)
 
-On the follow-up, Echo uses the earlier check as a baseline and searches again. In this run, the Inspector shows the baseline time and an **Unable to verify** verdict.
+Open **Inspect** on the recheck to see the search and memory status, baseline retrieval time, and the **Unable to verify** verdict.
 
-![Echo's follow-up showing Context used, a fresh citation, and an Unable to verify comparison in the Inspector](echo-temporal-comparison.jpg)
+![The Agent Inspector showing the selected reply's search usage, memory usage, comparison verdict, and trace ID](images/agent-inspector.webp)
+
+See the [README product tour](../README.md#product-tour) for the welcome screen, a direct answer, and a same-chat follow-up.
