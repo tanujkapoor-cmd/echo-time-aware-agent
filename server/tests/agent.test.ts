@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { compare, ground } from "../evidence.ts";
+import { compare, describesPricing, ground } from "../evidence.ts";
 import { historicalWindow, route } from "../routing.ts";
 import type { Snapshot } from "../types.ts";
 import { databaseFile, draft, harness, hit, plan, price, send, session } from "./harness.ts";
@@ -252,6 +252,8 @@ test("comparison rejects Node LTS granularity mismatch and different sources", (
 });
 
 test("price normalization preserves currency, cadence, tier, and per-unit boundaries", () => {
+  assert.equal(describesPricing("1 GB SSD storage included"), false);
+  assert.equal(describesPricing("Launch is billed purely based on usage."), true);
   const before = price("Render", "Basic", 19, "https://render.com/pricing", "instance");
   const baseline = { claims: ground(draft([before]), [before.source], false).claims, sources: [before.source] } as Snapshot;
   const candidates = [

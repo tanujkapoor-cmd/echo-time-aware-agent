@@ -33,6 +33,10 @@ function scopeKey(scope: PriceScope | null | undefined): string {
 
 function isPrice(attribute: string): boolean { return /\b(price|pricing|cost)\b/i.test(attribute); }
 
+export function describesPricing(quote: string): boolean {
+  return /\p{Sc}\s*\d|\b(?:USD|EUR|GBP|CAD|AUD|INR|JPY|CHF|CNY|NZD|SGD|HKD)\s*\d|\b(?:free plan|free tier|usage.based|based on usage|billed|base fee|monthly spend)\b/iu.test(quote);
+}
+
 function scopeSupported(scope: PriceScope | null, quote: string): boolean {
   if (!scope || !/^[A-Z]{3}$/.test(scope.currency) || !literal(quote, scope.currency) ||
       !scope.plan.trim() || !literal(quote, scope.plan) ||

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
-import { citeComparison, compare, ground, historicalCitations, renderCitations, summarizeComparison } from "./evidence.ts";
+import { citeComparison, compare, describesPricing, ground, historicalCitations, renderCitations, summarizeComparison } from "./evidence.ts";
 import { publicUrl, safeQuery } from "./providers.ts";
 import type { Model, SearchPlan, SearchProvider } from "./providers.ts";
 import { canSaveMemory, forceSearch, freshness, historicalWindow, overlap, refersBack, route, terms, timezone } from "./routing.ts";
@@ -342,6 +342,7 @@ export class Agent {
     const sources = [...unique.values()];
     const cached = batches.every(batch => batch.cached);
     const partial = batches.some(batch => batch.failed || !batch.hits.length);
+    const domains = queries.flatMap(item => item.domain ? [item.domain] : []);
     reply.search_status = sources.length ? (cached ? "cached" : "live")
       : batches.some(batch => batch.failed) ? "unavailable" : "empty";
     reply.memory_used = checking ? Boolean(prior || baseline) : Boolean(refersBack.test(message) && ctx.recent.length);
@@ -359,10 +360,13 @@ export class Agent {
       const draft = await infer(() => this.model.research({
         question: message, earlier_turn: prior, prior_claims: baseline?.claims ?? [],
         baseline_at: reply.baseline_at, timezone: zone, today: asked.toISOString(),
+        requested_domains: domains,
         sources: sources.map((source, index) => ({ id: "R" + (index + 1), ...source })),
       }, signal));
       update("validate_response");
       ({ citations, claims } = ground(draft, sources, cached));
+      if (domains.length && !checking) citations = citations.filter(item => describesPricing(item.quote) ||
+        claims.some(claim => claim.source_url === item.url && claim.quote === item.quote));
       if (!citations.length) reply.search_status = "unsupported";
     }
 
@@ -390,6 +394,14 @@ export class Agent {
         : "I couldn’t verify an answer from the sources I found.";
     }
     if (partial && citations.length) reply.answer += "\n\nPart of the search didn’t return usable evidence.";
+    if (!checking && domains.length) {
+      const missing = domains.filter(domain => !citations.some(citation => {
+        const host = publicUrl(citation.url)?.hostname ?? "";
+        return host === domain || host.endsWith("." + domain);
+      }));
+      if (missing.length && citations.length) reply.answer +=
+        "\n\nI couldn’t verify the requested pricing for " + missing.join(", ") + " from the retrieved excerpts.";
+    }
     reply.evidence_mode = citations.length ? (cached ? "cached_snippets" : "live_snippets") : "insufficient";
     if (!citations.length || cached || (checking && !claims.length)) return;
     const latest = new Date(Math.max(...sources.map(source => Date.parse(source.retrieved_at)))).toISOString();
