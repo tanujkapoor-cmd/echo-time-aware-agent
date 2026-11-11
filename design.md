@@ -8,7 +8,7 @@ A previous answer is a dated observation, not an assertion about the present. A 
 
 ~~~mermaid
 flowchart LR
-  C[REST or SSE client] --> A[FastAPI routes and demo identity]
+  C[Next.js same-origin proxy] --> A[FastAPI routes and browser identity]
   A --> O[ChatAgent state machine]
   O --> M[Context and temporal memory]
   M --> D[(SQLite or PostgreSQL)]
@@ -40,7 +40,7 @@ A turn reads a bounded context and the session revision in a short database sess
 
 ### Frontend integration
 
-The Next.js client uses a same-origin rewrite for FastAPI REST and SSE. This keeps the browser on one origin and leaves the backend's demo identity and CORS behavior unchanged. The client keeps the selected session ID locally and loads its messages from the backend. It renders streamed fragments as a preview and uses the completion payload for the saved reply. After an interruption it can resend the same request ID. The inspector uses per-reply response fields from both the stream and stored history.
+The Next.js client uses a same-origin rewrite for FastAPI REST and SSE. The client keeps the selected session ID locally and loads its messages from the backend. It renders streamed fragments as a preview and uses the completion payload for the saved reply. After an interruption it can resend the same request ID. The inspector reads per-reply response fields from both the stream and stored history, and fetches saved memories separately.
 
 ### Routing and the only tool
 
@@ -52,7 +52,7 @@ A search turn gives the model exactly one strict function, `web_search(query, ma
 
 | Table | What it preserves |
 | --- | --- |
-| `sessions` | Session UUID, demo owner, title, UTC creation time, and integer revision. Indexed by owner and time. |
+| `sessions` | Session UUID, browser or local owner, title, UTC creation time, and integer revision. Indexed by owner and time. |
 | `turns` | Two stable message UUIDs, ordered turn number, separate asked/answered times, user text, and the complete assistant response (sources, changes, evidence mode, and timings). Unique turn sequence and optional request ID per session. Owner is inherited from the session. |
 | `memories` | Explicit user quote in a typed slot (goal, preference, project, plan, commitment); observed/created UTC times, source user message ID, and supersession link. |
 | `snapshots` | Append-only research record linked to the assistant turn; original question, normalized topic, public query, UTC ask/retrieval/expiry, answer summary, claims, and provider excerpts. Indexed by owner, session, topic and time. |
@@ -85,7 +85,9 @@ Stable requests use one inference and no tool. A normal research turn uses one f
 
 ## Security and limits
 
-Run this demo on loopback. There is no authentication, authorization beyond the configured single identity, rate limiting, deletion flow, or encrypted storage policy. All queries use SQLAlchemy binding; the SQLite FTS query is bound and its search tokens are derived locally. The OpenAI call is made with `store=false`, which is not a guarantee about provider retention. The model receives the current request and bounded context. The tool planner never sees source snippets or semantic memory, and grounded synthesis has no tools. Snippets are treated as untrusted text. These controls reduce injection exposure but do not make model judgment or returned web content trustworthy. The app does not fetch cited pages. Render user text and excerpts as text in a client, not as trusted HTML.
+Local mode uses a single identity and should bind to loopback. Public demo mode requires PostgreSQL and a server-side signing secret. A signed, host-scoped, HTTP-only cookie identifies each browser. Session ownership and memory lookup use that identity, and identity-scoped responses disallow caching. The Next.js rewrite forwards the cookie and response through the frontend origin. Direct cross-origin calls are restricted by the configured CORS origin. This is anonymous isolation. There is no account recovery, rate limiting, deletion flow, or application-level encryption policy.
+
+Queries use SQLAlchemy binding, including SQLite FTS search terms derived locally. The OpenAI call is made with `store=false`, which is not a guarantee about provider retention. The model receives the current request and bounded context. The tool planner never sees source snippets or semantic memory, and grounded synthesis has no tools. Snippets are treated as untrusted text. These controls reduce injection exposure but do not make model judgment or returned web content trustworthy. The app does not fetch cited pages. The frontend renders excerpts as text and filters links by scheme.
 
 The routing rules are English-focused and can miss current facts phrased indirectly. Structured extraction can miss changes, conflate units, or choose irrelevant excerpts. Related wording can fragment topic keys, and identical values cannot prove continuity between checks. There is no source credibility model or article-level entailment verification. The cache is process-local, a retry can repeat external calls before a turn commits, and SQLite permits only one writer at a time. PostgreSQL uses the same relational schema and query fallback; see the verification notes for what was exercised. SSE streams progress and validated fragments; this delays the first answer fragment compared with raw model token streaming.
 
@@ -95,7 +97,7 @@ Explicit orchestration makes the routing and comparison policy reviewable and le
 
 Tests use a fixed clock, scripted model/search responses, and actual database migrations. They exercise general answers, provider contracts, recall, corrections, freshness, conflicting claims, errors, concurrency, persistence across restarts, and SSE completion. The eight cases in `evals/cases.json` specify behavioral expectations; the runner measures actual local HTTP turn latency and tool and provider usage. These fixtures evaluate policy and plumbing, not live search quality or model factual accuracy.
 
-Next, collect labeled temporal examples for routing and comparison errors. Then add a PostgreSQL search index or embeddings behind the existing candidate interface, better entity and unit normalization, source quality checks within the existing tool, real-provider regression runs, and authentication with deletion and retention controls before exposing a shared deployment.
+Next, collect labeled temporal examples for routing and comparison errors. Then add a PostgreSQL search index or embeddings behind the existing candidate interface, better entity and unit normalization, source quality checks within the existing tool, real-provider regression runs, and account authentication with deletion and retention controls.
 
 Echo can send model requests to Groq or OpenAI using the same SDK. Groq hosts the default GPT-OSS model. It receives a local tool request for search planning and a separate structured output request for synthesis. Tavily remains responsible for search. [Groq API compatibility](https://console.groq.com/docs/openai) · [Groq Structured Outputs](https://console.groq.com/docs/structured-outputs) · [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=chat) · [Tavily Search API](https://docs.tavily.com/documentation/api-reference/endpoint/search)
 

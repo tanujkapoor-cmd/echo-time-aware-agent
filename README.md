@@ -1,119 +1,115 @@
 # Echo
 
-Echo is a time-aware research chat for the minimi engineering challenge. Its Next.js interface connects to a FastAPI backend that can recall a previous answer, search again, and compare evidence from two different points in time. Tavily web search is the model's only external tool.
+**A time-aware AI chat agent with intelligent web search, persistent conversational memory, and evidence-backed change detection.**
 
-## Run the backend
+Echo was built for the minimi engineering challenge. When a user asks whether an earlier answer still holds, Echo identifies the prior research, looks for fresh evidence, and compares the two observations. It keeps the dates and sources visible so the user can tell what was known then and what can be verified now.
 
-From this directory, with Python 3.12 or later:
+![Echo chat and Agent Inspector showing a time-aware comparison and saved memory](docs/echo-workspace.png)
 
-~~~powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-Copy-Item .env.example .env
-# Open .env and set GROQ_API_KEY and TAVILY_API_KEY.
-.\.venv\Scripts\python.exe -m alembic upgrade head
-.\.venv\Scripts\python.exe -m uvicorn echo.main:app --host 127.0.0.1 --port 8000
+*The running Echo app, captured with deterministic search results and sample memory records.*
+
+[Technical design](design.md) · [Verification and evaluation](VERIFICATION.md)
+
+## What Echo does
+
+- **Remembers conversations and explicit user details.** Conversations persist across restarts. Echo can recall a dated turn, retrieve a saved plan across conversations, and keep the previous value when a plan is corrected.
+- **Searches when the question needs current evidence.** Rules route simple chat and personal recall away from search. For current questions, the model can call a single tool, `web_search`, backed by Tavily.
+- **Compares evidence over time.** A recheck uses the original research snapshot as a baseline. Echo reports a change, agreement, conflict, or insufficient evidence according to what the retrieved excerpts support.
+- **Shows its work in the Agent Inspector.** Inspect any saved answer to see search and memory usage, timings, trace ID, source excerpts, retrieval dates, and previous and current evidence. The Saved memory tab shows active and superseded records.
+
+## Architecture
+
+~~~mermaid
+flowchart LR
+    B[Browser] --> N[Next.js chat workspace]
+    N -->|Same-origin REST and SSE| A[FastAPI]
+    A --> R[Routing and context]
+    R -->|Read history, memory and snapshots| D[(PostgreSQL or local SQLite)]
+    R -->|Plan search or generate answer| M[Groq or OpenAI]
+    R -->|One web search tool| T[Tavily]
+    T --> G[Validate excerpts and compare claims]
+    M --> G
+    G -->|Commit turn, memory and research| D
+    G -->|Progress and saved reply| A
 ~~~
 
-On macOS/Linux use `python3.12 -m venv .venv`, `cp .env.example .env`, and replace `.\.venv\Scripts\python.exe` with `.venv/bin/python`. Run commands from the project root so the default SQLite path and `.env` resolve there. Browse [OpenAPI docs](http://127.0.0.1:8000/docs) or call `GET /api/v1/health`. Health checks schema access. Session and history APIs work without keys. Chat inference needs the selected model provider's key. A turn that requires web search reports insufficient evidence if Tavily is unavailable.
+The frontend uses Next.js, React, TypeScript, and CSS. The backend uses Python, FastAPI, Pydantic, SQLAlchemy, and Alembic. Groq hosts the default model in the example configuration. The same adapter supports OpenAI.
 
-The example selects Groq with `ECHO_LLM_PROVIDER=groq` and uses GPT-OSS 20B. For an existing `.env`, add `ECHO_LLM_PROVIDER=groq` and `GROQ_API_KEY`, then restart FastAPI. Set `GROQ_MODEL=openai/gpt-oss-120b` to use the larger Groq-hosted model. Existing configurations without a provider setting still use OpenAI. To select OpenAI explicitly, set `ECHO_LLM_PROVIDER=openai`, `OPENAI_API_KEY`, and optionally `OPENAI_MODEL`.
+1. **Load context.** Echo reads a bounded set of turns, active memories, research snapshots, and the session revision. It releases the database connection before calling a provider.
+2. **Route the turn.** Rules distinguish general chat, recall, current facts, contextual follow-ups, and comparisons. An ambiguous reference may require a structured resolver call.
+3. **Retrieve and validate.** The tool planner proposes a bounded public query. The backend enforces a two-call maximum, validates exact quoted excerpts against the source pool, and uses comparable claims to determine what changed. Explicit rechecks bypass the cache.
+4. **Commit and deliver.** A short transaction writes the turn and any new memory or research snapshot. Server-sent events report progress during processing, then deliver the validated answer in fragments and a final saved response. Retrying with the same request ID can recover an already committed turn.
 
-For PostgreSQL install `".[dev,postgres]"`, set `ECHO_DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@HOST/DB`, and run the same migrations before starting. SQLite uses FTS5 when available. PostgreSQL and SQLite without FTS5 use bounded ranking of recent rows. See [design.md](design.md) for database and deployment limits.
+Echo stores when the user made a statement and when it was recorded. A memory correction must quote the user’s message and identify the active record it replaces. Research snapshots separately store when sources were retrieved and when those results expire. A failed or unsupported recheck leaves the older result available as history and reports that the current claim could not be verified.
 
-## Run the frontend
+## Run locally
 
-Keep the backend running on port 8000. In a second terminal, from the project root, run the following commands with Node.js 22.18 or later.
+Use Python 3.12 or later and Node.js 22.18 or later. Run the backend commands from the repository root. On Windows, activate with `.\.venv\Scripts\Activate.ps1` and copy the example with `Copy-Item .env.example .env`.
 
-~~~powershell
+~~~bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
+cp .env.example .env
+# Set GROQ_API_KEY and TAVILY_API_KEY in .env.
+python -m alembic upgrade head
+python -m uvicorn echo.main:app --host 127.0.0.1 --port 8000
+~~~
+
+In another terminal:
+
+~~~bash
 cd frontend
-npm.cmd ci
-Copy-Item .env.example .env.local
-npm.cmd run dev
+npm ci
+npm run dev
 ~~~
 
-On macOS and Linux, use `npm` and `cp .env.example .env.local`. Open [Echo Chat](http://127.0.0.1:3000).
+Open the [chat workspace](http://127.0.0.1:3000/) or the [API reference](http://127.0.0.1:8000/docs). FastAPI exposes database health at `GET /api/v1/health`.
 
-`NEXT_PUBLIC_API_BASE_URL` is the backend origin and defaults to `http://127.0.0.1:8000`. Next.js forwards same-origin `/api/v1` requests to that origin. Set it before starting development or building for production. Put provider keys in the backend `.env`.
+| Variable | Where to set it | Purpose |
+| --- | --- | --- |
+| `ECHO_LLM_PROVIDER` | Backend | Choose `groq` or `openai`. The example selects Groq. |
+| `GROQ_API_KEY`, `GROQ_MODEL` | Backend | Groq credential and optional model override. The example uses `openai/gpt-oss-20b`. |
+| `OPENAI_API_KEY`, `OPENAI_MODEL` | Backend | Credential and model override when using OpenAI. |
+| `TAVILY_API_KEY` | Backend | Web search credential. |
+| `ECHO_DATABASE_URL` | Backend | Defaults to local SQLite. Install `.[postgres]` to use PostgreSQL. |
+| `ECHO_PUBLIC_DEMO`, `ECHO_BROWSER_SECRET` | Backend | Public mode requires PostgreSQL and a signing secret of at least 32 bytes. The secret keeps anonymous browser histories separate. |
+| `ECHO_FRONTEND_ORIGIN` | Backend | Exact HTTPS frontend origin for direct browser CORS access. |
+| `NEXT_PUBLIC_API_BASE_URL` | Frontend | Backend origin for the Next.js rewrite. Defaults to loopback locally and is required on Vercel production builds. |
 
-1. Start a new chat. Choose the Python release prompt to fill the composer and press **Enter** to send. Use **Shift+Enter** for a newline.
-2. In the same chat, ask “Has anything changed?” or “What did you tell me earlier about Python?” Reopen the conversation from the sidebar to see its saved messages.
-3. Open **Agent Inspector** to see the latest reply's search and memory usage, elapsed time, search calls, citations, detected changes, and trace ID. Select **Inspect** on an older reply to see its metadata. The backend does not return per-reply memory references.
+Keep provider keys and signing credentials in the backend environment. Next.js forwards REST and SSE through the frontend origin and needs only the API origin.
 
-The frontend uses session creation, session listing, message history, and the streaming chat endpoint. It uses the JSON chat endpoint if the server has no stream route. **Stop** cancels the browser request. Resending the same message after cancellation or interruption reuses the request ID in the current page so a committed reply can be recovered. Echo emits progress during processing and sends answer fragments after saving the turn.
+## Try it
 
-### Frontend checks
+1. Start a chat and send “My interview is on Friday.” Then send “Actually, my interview was moved to Monday.”
+2. Start a new chat in the same browser and ask “What is my interview plan?” A successful extraction and correction lets Echo recall Monday. Open **Agent Inspector → Saved memory** to see the active plan and the superseded record. Ambiguous statements can be skipped.
+3. In a research chat, ask “What is the latest stable Python release?” Follow up with “Has anything changed since I last asked?” Inspect both replies to compare their retrieval dates and source excerpts. The result depends on the evidence available at the time.
 
-From `frontend/`, run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build`. The test suite uses Node's built-in runner. See [verification](VERIFICATION.md) for the browser and backend checks.
+## Test and evaluate
 
-### Publish the Git repository
+~~~bash
+python -m ruff format --check .
+python -m ruff check .
+python -m pytest -q
+python -m evals.run
 
-With GitHub CLI installed and signed in, run this from the project root. Replace `YOUR_ACCOUNT` with your GitHub username or organization.
-
-~~~powershell
-gh repo create YOUR_ACCOUNT/echo --public --source . --remote origin --push
+cd frontend
+npm run typecheck
+npm run lint -- --max-warnings 0
+npm test
+npm run build
 ~~~
 
-For an existing empty GitHub repository, use `git remote add origin <your-repository-url>` and `git push -u origin main`.
+Backend tests use real migrations and controlled model and search responses. They exercise persistence, routing, citation validation, temporal comparison, memory correction, and SSE. The evaluation runner reports passed scenarios, provider and tool calls, and measured p50 and p95 local HTTP latency. Fixture latency excludes real provider network and inference time. [Verification details](VERIFICATION.md)
 
-## API
+## Deployment
 
-| Method and path | Behavior |
-| --- | --- |
-| `POST /api/v1/sessions` | Create a session; optional JSON `{"title":"Research"}`. |
-| `GET /api/v1/sessions` | List sessions for the demo identity, newest first; `limit` and `offset`. |
-| `GET /api/v1/sessions/{id}/messages` | Return two messages per completed turn, oldest first. `limit` counts turns (max 100); increment `after` by the number of turns received. |
-| `POST /api/v1/chat` | Send `session_id`, `message`, and optionally a UUID `request_id` to replay a completed request safely. |
-| `POST /api/v1/chat/stream` | Same body; returns SSE. |
-| `GET /api/v1/memories` | List active explicit user memories; filter by `kind` and pass `include_superseded=true` to see history. Supports `limit` and `offset`. |
-| `GET /api/v1/health` | Check database access. |
+The deployment pairs a Vercel Next.js project rooted at `frontend/` with a Render FastAPI service and managed PostgreSQL. The [Render Blueprint](render.yaml) wires the database connection into FastAPI, runs Alembic before Uvicorn, and configures the health endpoint. Use the deployed backend origin for the Vercel rewrite and the frontend origin for backend CORS. Each browser receives a signed, secure cookie so its saved sessions and memory are isolated from other visitors.
 
-~~~powershell
-$echoBase = 'http://127.0.0.1:8000/api/v1'
-$echoSession = Invoke-RestMethod -Method Post -Uri "$echoBase/sessions" -ContentType 'application/json' -Body '{"title":"Python releases"}'
-function Ask-Echo([string]$message) {
-    $echoBody = @{ session_id = $echoSession.id; message = $message; request_id = [guid]::NewGuid() } | ConvertTo-Json -Compress
-    Invoke-RestMethod -Method Post -Uri "$echoBase/chat" -ContentType 'application/json' -Body $echoBody
-}
-Ask-Echo 'What is the latest stable Python release?'
-Ask-Echo 'Has anything changed?'
-Ask-Echo 'What did you tell me earlier about Python?'
-Invoke-RestMethod "$echoBase/sessions/$($echoSession.id)/messages"
-~~~
+Render’s free service can cold-start after inactivity. Free Render PostgreSQL is suitable for a time-limited hiring demo and expires after 30 days. Longer retention requires a database that does not expire. [Render free-tier limits](https://render.com/docs/free)
 
-A successful recheck shows the original retrieval time and the current excerpts. If the excerpts establish a comparable value, `changes` says whether it changed. A missing or failed search yields `insufficient`, never an assertion of no change. These examples depend on current provider results; no Python version is assumed.
+## Limitations and next steps
 
-For a second example: send “My interview is on Friday.”, then “Actually, it was moved to Monday.”, then “What is my interview plan?”. Inspect `/memories?kind=plan&include_superseded=true` to see both records. Memory extraction is conservative and may skip an ambiguous correction.
+The public demo uses anonymous browser identity, so clearing cookies or switching browsers loses access to that history. It has no account sign-in or deletion UI. PostgreSQL ranks a bounded recent set of rows and can miss older matches. Routing is primarily English, search coverage depends on Tavily, and a matching excerpt does not establish source credibility. The Inspector can show that Echo used context, but the API does not link individual saved memories to a reply.
 
-`web_search_used` means a provider call was attempted. `search_status` distinguishes `live`, `cached`, `empty`, `unavailable`, `unsupported`, and `not_used`. A live status means the API retrieved excerpts during this turn; it says nothing about when Tavily indexed the underlying pages. Citations carry both `published_at` (when supplied) and `retrieved_at`; citation provenance is `live`, `cached`, or `historical`. The `evidence_mode` distinguishes model knowledge, conversation, historical recall, supported excerpts, and insufficient evidence.
-
-A `request_id` is scoped to the session. Reuse it with the same text to get the original result and trace; different text returns HTTP 409. If overlapping requests race in one session, the losing write gets HTTP 409 and can be retried. Requests that fail before a completed turn is committed do not leave partial messages.
-
-## SSE protocol
-
-POST JSON with a client that can consume a response stream (for example, fetch or curl with `-N`; native EventSource uses GET). Event payloads are JSON:
-
-| Event | Payload |
-| --- | --- |
-| `status` | `{stage, trace_id}` as the turn advances. |
-| `sources` | `{citations: [...]}` before answer text. |
-| `token` | `{text}` with a text fragment; concatenate in order. |
-| `error` | `{code, message, trace_id}` for a failed turn after headers. |
-| `completed` | `{ok:true,response:ChatView}` after commit or `{ok:false,trace_id}` after an error. |
-
-The server streams progress while waiting, with heartbeat comments during long stages. It emits answer fragments only after validating and saving the reply; the fragments are not raw model tokens. Invalid request bodies return JSON HTTP 422 before streaming. A client disconnect can prevent delivery of the terminal event; retry with the same request ID to recover a committed answer.
-
-## Verify
-
-~~~powershell
-.\.venv\Scripts\python.exe -m ruff format --check .
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m alembic check
-.\.venv\Scripts\python.exe -m evals.run
-~~~
-
-Tests use a migrated, temporary database, a fixed clock, and fake providers; adapter contract tests exercise HTTP request shapes without credentials. The evaluation reports expected outcomes, tool and provider counts, and measured p50/p95 for fixture HTTP turns. Those timings are local baseline measurements, not real-provider latency or accuracy.
-
-This is a single-user demo. It has no authentication, so bind it to loopback and keep `.env` private. The `demo_identity` dependency is the integration point for a future authenticated deployment.
-
+Future work includes account authentication and retention controls, a PostgreSQL search index, stronger entity and unit normalization, and a labeled real-provider evaluation set. See [design.md](design.md) for the routing, storage, and evidence tradeoffs.

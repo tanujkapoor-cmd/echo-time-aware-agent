@@ -1,29 +1,23 @@
 # Verification
 
-Executed on Python 3.12 on Windows from the Echo project root:
+## Release checks
 
 | Check | Result |
 | --- | --- |
-| `python -m ruff format --check .` and `python -m ruff check .` | Passed. |
-| `python -m pytest -q` | 37 passed. Includes both provider HTTP contracts via mock transports, migration-backed API tests, restart persistence, comparison, corrections, and SSE. |
-| SQLite: `alembic upgrade head`, `alembic check`, `alembic downgrade base`, `alembic upgrade head` | Passed on a disposable database. |
-| Uvicorn loopback smoke test | Startup, health, OpenAPI, session creation/listing, empty message history, and the sanitized missing-key chat response worked over HTTP. |
-| `python -m evals.run` | 8 of 8 fixture scenarios passed over 14 chat turns, with 7 search tool calls and 7 fake provider calls. |
-| PostgreSQL: `alembic upgrade head --sql` | PostgreSQL DDL generated successfully, with timezone-aware timestamps and no SQLite-specific FTS statements. |
+| Python formatting and lint | Ruff passed. |
+| Backend automated tests | 41 passed. Coverage includes routing, citations, memory, comparisons, persistence, SSE, provider contracts, and isolation between browser cookies. |
+| Deterministic evaluation | 8 of 8 scenarios passed over 14 turns, with 7 search tool calls and 7 fake provider calls. |
+| SQLite | Migration upgrade, schema check, downgrade, and re-upgrade passed on a disposable database. |
+| PostgreSQL | Migration upgrade, schema check, downgrade, and re-upgrade passed on PostgreSQL 18. The API verified cross-session memory correction, history, and persistence after restarting the application. |
+| Frontend | TypeScript, ESLint, all 12 automated tests, and the Next.js production build passed. |
+| Browser | 29 checks passed in Edge against the production build with fixture providers. They cover session switching, submission, streaming and retry, the Inspector, evidence, saved memory, reduced motion, and widths from 375 to 1440 px. |
+| Render Blueprint | Passed Render’s public JSON Schema validation. |
+| Publication scan | Gitleaks scanned Git history. A separate check compared locally configured provider keys against the tracked files and reachable historical blobs. Neither check found a credential. |
 
-The measured fixture run recorded **14.57 ms p50** and **18.86 ms p95** for local in-process HTTP turns. Inference and search used deterministic fixtures; these figures do not measure provider latency or factual accuracy.
+## Live provider smoke tests
 
-A live OpenAI/Tavily smoke test was not run because the API keys were not configured. PostgreSQL DDL was checked offline; no live PostgreSQL server was available.
+Local smoke tests used real Groq and Tavily calls and an isolated database. Groq returned a streamed general answer and a dated recall. Tavily returned live citations that passed Echo’s source checks. A fresh recheck found the historical baseline but did not return comparable evidence, so Echo reported the comparison as insufficient. In a separate focused run, Groq saved a plan, superseded it in a new conversation, and recalled the corrected plan. The initial combined run encountered transient inference errors during the memory steps.
 
-## Frontend
+## Evaluation method
 
-| Check | Result |
-| --- | --- |
-| `npm run typecheck`, `npm run lint -- --max-warnings 0`, and `npm run build` | Passed on Node.js 24. |
-| `npm test` | 11 passed. Covers API errors and pagination, fragmented UTF-8 and SSE frames, terminal errors, interrupted streams, and the JSON fallback. |
-| Next.js development server and real FastAPI backend | Verified same-origin health and session creation, session selection, and the missing OpenAI key error from the SSE endpoint. |
-| Playwright with fixture providers | Verified successful reply display, citations, change metadata, conversation switching and reload, Markdown code blocks, and cancel/retry with the same request ID. The fixture server used Echo's FastAPI endpoints with deterministic model and search adapters. |
-| Responsive browser check | Passed at 1440px and 390px. Conversation and inspector disclosures worked on mobile without horizontal overflow. |
-
-OpenAI and Tavily credentials were unavailable. Successful chat, search, and change comparison were verified with fixture providers.
-
+Run `python -m evals.run` from the repository root. The runner exercises HTTP turns against real migrated storage with a fixed clock and deterministic provider responses. It checks policy and evidence outcomes, counts model-directed search calls and provider requests, and measures p50 and p95 turn latency. Those timings describe the local fixture path and exclude live provider latency. Live search results and model outputs can vary between runs.
