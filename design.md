@@ -50,9 +50,11 @@ For comparison, Echo groups claims by normalized subject and attribute, then com
 
 ## What the user can inspect
 
-The Next.js workspace gives the user a conversation sidebar, a central composer, and an Agent Inspector. A same-origin rewrite carries REST and SSE through the frontend domain. The composer keeps typing state local, and the transcript reconciles pending and saved replies by stable keys.
+The Next.js workspace gives the user a conversation sidebar, a central composer, and an Agent Inspector. The sidebar filters titles and previews the client has already loaded. The welcome cards put example questions in the composer for the user to edit. A same-origin rewrite carries REST and SSE through the frontend domain. The composer keeps typing state local, and the transcript reconciles pending and saved replies by stable keys.
 
 The Inspector distinguishes a live search from a cache hit, reports whether context was used, and shows response time, search calls, cited excerpts, and the trace ID. Comparison cards keep earlier and current claims side by side. Saved memory has its own timeline because the API reports context usage at the reply level and does not provide a record-by-record citation for memory.
+
+The welcome orb loads Three.js in the browser when the welcome view mounts. It renders on pointer movement and while easing back into place. It releases the graphics resources when the view closes. Reduced-motion settings keep it still, and the Echo mark appears if WebGL is unavailable.
 
 ## Where Echo fails and how I check it
 

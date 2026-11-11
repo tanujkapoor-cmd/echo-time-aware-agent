@@ -18,6 +18,12 @@
 
 Local smoke tests used real Groq and Tavily calls and an isolated database. Groq returned a streamed general answer and a dated recall. Tavily returned live citations that passed Echo’s source checks. A fresh recheck found the historical baseline but did not return comparable evidence, so Echo reported the comparison as insufficient. In a separate focused run, Groq saved a plan, superseded it in a new conversation, and recalled the corrected plan. The initial combined run encountered transient inference errors during the memory steps.
 
+The deployed Render API passed its health check and returned a live answer with two Tavily citations after the provider configuration was updated.
+
 ## Evaluation method
 
 Run `python -m evals.run` from the repository root. The runner exercises HTTP turns against real migrated storage with a fixed clock and deterministic provider responses. It checks policy and evidence outcomes, counts model-directed search calls and provider requests, and measures p50 and p95 turn latency. Those timings describe the local fixture path and exclude live provider latency. Live search results and model outputs can vary between runs.
+
+## Workspace redesign
+
+The TypeScript check, ESLint, 12 frontend tests, and Next.js production build passed. The in-app Chromium browser rendered the production build at 1504 × 1161 and 375 × 812. The orb canvas changed on pointer interaction and was removed when the conversation opened. Browser checks also covered prompt selection, Shift+Enter, sending, session restoration, history filtering, mobile drawers, the memory timeline, source excerpts, and temporal comparison with deterministic providers. The browser console reported no warnings or errors during these checks.

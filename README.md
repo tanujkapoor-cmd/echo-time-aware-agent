@@ -4,9 +4,9 @@
 
 Echo was built for the minimi engineering challenge. When a user asks whether an earlier answer still holds, Echo identifies the prior research, looks for fresh evidence, and compares the two observations. It keeps the dates and sources visible so the user can tell what was known then and what can be verified now.
 
-![Echo chat and Agent Inspector showing a time-aware comparison and saved memory](docs/echo-workspace.png)
+![Echo’s welcome workspace with a Three.js orb, composer, and suggested questions](docs/echo-workspace.jpg)
 
-*The running Echo app, captured with deterministic search results and sample memory records.*
+*The running Echo app with a fixture conversation in the sidebar.*
 
 [Technical design](design.md) · [Verification and evaluation](VERIFICATION.md)
 
