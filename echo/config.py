@@ -1,13 +1,20 @@
+from typing import Literal
+
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+LLMProvider = Literal["openai", "groq"]
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    echo_llm_provider: LLMProvider = "openai"
     openai_api_key: SecretStr = SecretStr("")
+    groq_api_key: SecretStr = SecretStr("")
     tavily_api_key: SecretStr = SecretStr("")
     openai_model: str = "gpt-4o-mini"
+    groq_model: str = "openai/gpt-oss-20b"
     echo_database_url: str = "sqlite+aiosqlite:///./echo.db"
     echo_demo_user: str = Field("local-demo", min_length=1, max_length=128)
     echo_turn_timeout: float = Field(35, gt=0, le=180)

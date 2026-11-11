@@ -8,7 +8,7 @@ from openai import AsyncOpenAI
 from echo.config import Settings
 from echo.errors import ModelUnavailable
 from echo.evidence import FactDraft, Witness, compare, ground
-from echo.llm import OpenAIModel
+from echo.llm import ChatCompletionsModel
 from echo.routing import Route, decide, historical_window
 from echo.schemas import ChangeKind
 from echo.search import Freshness, SearchCache, TavilySearch
@@ -147,15 +147,26 @@ async def test_tavily_http_contract(clock):
     assert hits[0].retrieved_at == clock()
 
 
-async def test_openai_sdk_http_contract():
+@pytest.mark.parametrize(
+    ("provider", "base_url", "model_name"),
+    [
+        ("openai", "https://api.openai.com/v1", "gpt-4o-mini"),
+        ("groq", "https://api.groq.com/openai/v1", "openai/gpt-oss-20b"),
+    ],
+)
+async def test_chat_completions_sdk_http_contract(provider, base_url, model_name):
     seen = []
 
     async def handler(request):
+        assert str(request.url) == base_url + "/chat/completions"
         body = json.loads(request.content)
+        assert body["model"] == model_name
         seen.append(body)
         if "tools" in body:
             assert [item["function"]["name"] for item in body["tools"]] == ["web_search"]
             assert body["parallel_tool_calls"] is False
+            if provider == "groq":
+                assert body["tool_choice"] == "required"
             message = {
                 "role": "assistant",
                 "tool_calls": [
@@ -188,22 +199,28 @@ async def test_openai_sdk_http_contract():
                 "id": "test",
                 "object": "chat.completion",
                 "created": 0,
-                "model": "gpt-4o-mini",
+                "model": model_name,
                 "choices": [{"index": 0, "message": message, "finish_reason": "stop"}],
                 "usage": {"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10},
             },
         )
 
     http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    async with AsyncOpenAI(api_key="fixture", http_client=http, max_retries=0) as client:
-        model = OpenAIModel(client, "gpt-4o-mini", timeout=10)
+    async with AsyncOpenAI(
+        api_key="fixture", base_url=base_url, http_client=http, max_retries=0
+    ) as client:
+        model = ChatCompletionsModel(client, model_name, timeout=10, provider=provider)
         calls, tokens = await model.tool_call({"question": "What is the latest Python?"})
         answer, _ = await model.answer({"question": "Hi"})
     assert calls[0].name == "web_search" and tokens == 10
     assert answer.answer == "Hello" and len(seen) == 2
-    assert all(not body["store"] for body in seen)
+    if provider == "groq":
+        assert all("store" not in body and body["reasoning_effort"] == "low" for body in seen)
+    else:
+        assert all(body["store"] is False for body in seen)
 
 
-async def test_missing_model_key_is_explicit():
-    with pytest.raises(ModelUnavailable, match="OPENAI_API_KEY"):
-        await OpenAIModel(None, "gpt-4o-mini", 1).answer({"question": "Hi"})
+@pytest.mark.parametrize("provider", ["openai", "groq"])
+async def test_missing_model_key_is_explicit(provider):
+    with pytest.raises(ModelUnavailable, match=f"{provider.upper()}_API_KEY"):
+        await ChatCompletionsModel(None, "unused", 1, provider).answer({"question": "Hi"})

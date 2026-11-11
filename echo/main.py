@@ -19,7 +19,7 @@ from echo.agent import ChatAgent
 from echo.config import Settings
 from echo.db import Memory, Session, Turn, database, utcnow
 from echo.errors import EchoError
-from echo.llm import Model, OpenAIModel
+from echo.llm import ChatCompletionsModel, Model
 from echo.memory import memory_view, owned_session
 from echo.schemas import (
     ChatInput,
@@ -237,13 +237,26 @@ def create_app(
 
             inference = model
             if inference is None:
-                key = settings.openai_api_key.get_secret_value()
+                use_groq = settings.echo_llm_provider == "groq"
+                key = (
+                    settings.groq_api_key if use_groq else settings.openai_api_key
+                ).get_secret_value()
                 client = None
                 if key:
                     client = await stack.enter_async_context(
-                        AsyncOpenAI(api_key=key, max_retries=0, timeout=settings.echo_model_timeout)
+                        AsyncOpenAI(
+                            api_key=key,
+                            base_url="https://api.groq.com/openai/v1" if use_groq else None,
+                            max_retries=0,
+                            timeout=settings.echo_model_timeout,
+                        )
                     )
-                inference = OpenAIModel(client, settings.openai_model, settings.echo_model_timeout)
+                inference = ChatCompletionsModel(
+                    client,
+                    settings.groq_model if use_groq else settings.openai_model,
+                    settings.echo_model_timeout,
+                    settings.echo_llm_provider,
+                )
             app.state.db = factory
             app.state.agent = ChatAgent(
                 factory, inference, SearchService(tavily, settings, clock), settings, clock

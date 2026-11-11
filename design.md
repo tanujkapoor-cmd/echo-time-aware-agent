@@ -12,7 +12,7 @@ flowchart LR
   A --> O[ChatAgent state machine]
   O --> M[Context and temporal memory]
   M --> D[(SQLite or PostgreSQL)]
-  O --> L[OpenAI adapter]
+  O --> L[Chat Completions adapter]
   O --> F[Freshness policy and cache]
   F --> T[Tavily Search adapter]
   O --> G[Grounding and claim comparison]
@@ -97,5 +97,5 @@ Tests use a fixed clock, scripted model/search responses, and actual database mi
 
 Next, collect labeled temporal examples for routing and comparison errors. Then add a PostgreSQL search index or embeddings behind the existing candidate interface, better entity and unit normalization, source quality checks within the existing tool, real-provider regression runs, and authentication with deletion and retention controls before exposing a shared deployment.
 
-Provider contracts: [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=chat) and [Tavily Search API](https://docs.tavily.com/documentation/api-reference/endpoint/search).
+Echo can send model requests to Groq or OpenAI using the same SDK. Groq hosts the default GPT-OSS model. It receives a local tool request for search planning and a separate structured output request for synthesis. Tavily remains responsible for search. [Groq API compatibility](https://console.groq.com/docs/openai) · [Groq Structured Outputs](https://console.groq.com/docs/structured-outputs) · [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=chat) · [Tavily Search API](https://docs.tavily.com/documentation/api-reference/endpoint/search)
 

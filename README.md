@@ -10,14 +10,16 @@ From this directory, with Python 3.12 or later:
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 Copy-Item .env.example .env
-# Open .env and set OPENAI_API_KEY and TAVILY_API_KEY.
+# Open .env and set GROQ_API_KEY and TAVILY_API_KEY.
 .\.venv\Scripts\python.exe -m alembic upgrade head
 .\.venv\Scripts\python.exe -m uvicorn echo.main:app --host 127.0.0.1 --port 8000
 ~~~
 
-On macOS/Linux use `python3.12 -m venv .venv`, `cp .env.example .env`, and replace `.\.venv\Scripts\python.exe` with `.venv/bin/python`. Run commands from the project root so the default SQLite path and `.env` resolve there. Browse [OpenAPI docs](http://127.0.0.1:8000/docs) or call `GET /api/v1/health`. Health checks schema access; they do not test provider credentials. Session and history APIs work without keys. Chat inference requires OpenAI; a turn requiring web search reports insufficient evidence if Tavily is unavailable.
+On macOS/Linux use `python3.12 -m venv .venv`, `cp .env.example .env`, and replace `.\.venv\Scripts\python.exe` with `.venv/bin/python`. Run commands from the project root so the default SQLite path and `.env` resolve there. Browse [OpenAPI docs](http://127.0.0.1:8000/docs) or call `GET /api/v1/health`. Health checks schema access. Session and history APIs work without keys. Chat inference needs the selected model provider's key. A turn that requires web search reports insufficient evidence if Tavily is unavailable.
 
-Set `OPENAI_MODEL` to a Chat Completions model supporting strict function calls and structured output. For PostgreSQL install `".[dev,postgres]"`, set `ECHO_DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@HOST/DB`, and run the same migrations before starting. SQLite uses FTS5 when available; PostgreSQL and SQLite without FTS5 use bounded ranking of recent rows. See [design.md](design.md) for database and deployment limits.
+The example selects Groq with `ECHO_LLM_PROVIDER=groq` and uses GPT-OSS 20B. For an existing `.env`, add `ECHO_LLM_PROVIDER=groq` and `GROQ_API_KEY`, then restart FastAPI. Set `GROQ_MODEL=openai/gpt-oss-120b` to use the larger Groq-hosted model. Existing configurations without a provider setting still use OpenAI. To select OpenAI explicitly, set `ECHO_LLM_PROVIDER=openai`, `OPENAI_API_KEY`, and optionally `OPENAI_MODEL`.
+
+For PostgreSQL install `".[dev,postgres]"`, set `ECHO_DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@HOST/DB`, and run the same migrations before starting. SQLite uses FTS5 when available. PostgreSQL and SQLite without FTS5 use bounded ranking of recent rows. See [design.md](design.md) for database and deployment limits.
 
 ## Run the frontend
 
