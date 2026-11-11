@@ -113,6 +113,24 @@ async def test_recheck_cites_conflicting_result_the_model_omitted(settings, cloc
         }
 
 
+async def test_flattened_release_listing_is_readable_and_preserves_the_source_quote(
+    settings, clock
+):
+    quote = "1. Python 3.15.2Oct. 25, 2026DownloadRelease notes"
+    hit = release(clock, "3.15.2").model_copy(
+        update={"url": "https://www.python.org/downloads", "snippet": quote}
+    )
+    model = FakeModel(
+        answers=[draft(excerpts=[Witness(source_id="R1", quote=quote)])], tools=[tool()]
+    )
+    app = app_for(settings, clock, model, FakeSearch([hit]))
+    async with app.router.lifespan_context(app), client_for(app) as client:
+        sid = await session(client)
+        reply = await send(client, sid, "What is the latest stable Python release?")
+        assert reply["answer"] == "python.org lists Python 3.15.2 dated Oct. 25, 2026 [S1]."
+        assert reply["citations"][0]["quote"] == quote
+
+
 async def test_recheck_does_not_call_a_different_quote_from_the_same_listing_a_change(
     settings, clock
 ):

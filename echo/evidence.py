@@ -1,6 +1,7 @@
 import re
 from collections import defaultdict
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field
 
@@ -21,13 +22,34 @@ class FactDraft(BaseModel):
     witness: Witness
 
 
+_RELEASE_ROW = re.compile(
+    r"(?:\d+\.\s+)?(?P<release>[A-Z][\w +.-]*? \d+(?:\.\d+)+)"
+    r"\s*(?:[-–]\s*)?(?P<date>[A-Z][a-z]+\.? \d{1,2}, \d{4})"
+    r"\s*Download\s*Release notes",
+    re.IGNORECASE,
+)
+
+
+def _readable_excerpt(citation: Citation) -> str:
+    # Tavily can concatenate the cells of a release table. Format the fields
+    # we can read directly and leave the original text in the source card.
+    row = _RELEASE_ROW.fullmatch(citation.quote)
+    host = urlsplit(citation.url).hostname
+    if row and host:
+        return (
+            f"{host.removeprefix('www.')} lists {row['release']} "
+            f"dated {row['date']} [{citation.id}]."
+        )
+    return f"“{citation.quote}” [{citation.id}]"
+
+
 @dataclass(frozen=True)
 class Grounding:
     citations: list[Citation]
     claims: list[Claim]
 
     def render(self) -> str:
-        return "\n".join(f"“{citation.quote}” [{citation.id}]" for citation in self.citations)
+        return "\n\n".join(map(_readable_excerpt, self.citations))
 
 
 def _contains(value: str, quote: str) -> bool:
