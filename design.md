@@ -1,103 +1,69 @@
 # Echo design
 
-## Problem and philosophy
+“Has anything changed?” is the question I designed Echo around. A useful answer has to find what the user asked, recover what Echo knew at the time, and check whether today’s evidence supports the same claim. A chat history gives Echo the first two pieces. It takes a fresh lookup and a comparable claim to answer the third.
 
-A previous answer is a dated observation, not an assertion about the present. A follow-up such as “Is that still accurate?” has three separate jobs: resolve “that,” obtain new evidence, and decide whether the old and new evidence answer the same factual question. Echo records the steps separately so a failed lookup cannot be mistaken for an unchanged fact. It favors one model call for a simple question and gives application code ownership of when a search is warranted and what gets persisted.
+The challenge asks for a fast, accurate agent with one tool that remembers what you asked and when. Echo exposes one function to the model, `web_search`, backed by Tavily. Retrieval, persistence, caching, and claim comparison run inside the application. Keeping those decisions in code made the search budget and failure behavior testable.
 
-## Components and lifecycle
+## One turn
 
 ~~~mermaid
 flowchart LR
-  C[Next.js same-origin proxy] --> A[FastAPI routes and browser identity]
-  A --> O[ChatAgent state machine]
-  O --> M[Context and temporal memory]
-  M --> D[(SQLite or PostgreSQL)]
-  O --> L[Chat Completions adapter]
-  O --> F[Freshness policy and cache]
-  F --> T[Tavily Search adapter]
-  O --> G[Grounding and claim comparison]
-  G --> O
-  O --> D
-  O --> P[Structured timings and trace ID]
+  U[Browser workspace] -->|REST and SSE| N[Next.js proxy]
+  N --> A[FastAPI routes]
+  A --> C[ChatAgent]
+  C --> R[Routing and context]
+  R -->|Bounded retrieval| D[(SQLite or PostgreSQL)]
+  C --> M[Groq or OpenAI adapter]
+  C -->|web_search| T[Tavily]
+  C --> E[Evidence validation and comparison]
+  E -->|Completed turn, memory and snapshots| D
+  E -->|Answer, sources and trace| A
 ~~~
 
-~~~mermaid
-stateDiagram-v2
-  [*] --> receive_query
-  receive_query --> load_context
-  load_context --> complete: idempotent replay
-  load_context --> decide_search
-  decide_search --> execute_search: evidence needed
-  decide_search --> generate_answer: no search or clarification
-  execute_search --> generate_answer
-  generate_answer --> validate_response
-  validate_response --> persist_memory
-  persist_memory --> complete
-  complete --> [*]
-~~~
+1. **Load context.** FastAPI resolves the browser identity and the conversation. The agent reads a bounded set of messages, active memories, candidate research snapshots, and the session revision. It releases the database connection before provider calls.
+2. **Decide whether to search.** General questions, personal recall, and dated history follow a local route. Current facts, explicit lookups, and comparisons can search. A contextual question can use a tool-free resolver to choose a supplied snapshot or identify a public subject grounded in the conversation.
+3. **Get evidence and draft.** For a search, the model proposes one function call with a bounded query and result count. Echo validates it before calling Tavily. One distinct reformulation is allowed after an empty result, for a maximum of two searches. Synthesis receives bounded excerpts and can cite them by ID.
+4. **Validate and save.** The agent checks the draft, compares claims when relevant, and writes the completed turn and any new records in a short transaction. The session revision detects concurrent writes. The same request ID can replay an already committed answer, including its trace.
+5. **Return progress and the saved answer.** Server-sent events carry progress and heartbeats during processing. After validation and commit, Echo sends source metadata, answer fragments, and the completed reply. This gives the user early feedback while keeping the visible answer tied to the stored result.
 
-A turn reads a bounded context and the session revision in a short database session. It releases that connection before inference or search. It resolves the referent, obtains evidence when needed, and validates the draft. A short transaction compares and increments the session revision, then writes the completed turn and associated memory or snapshot. If the revision changed, the response is replayed by request ID when possible; otherwise the caller retries against the updated conversation. Errors before commit leave no half turn. SSE observes the same state machine; its successful completion follows commit.
+The Python backend uses FastAPI, Pydantic, SQLAlchemy, and Alembic. One Chat Completions adapter supports Groq and OpenAI. A normal chat takes one model call. Research typically takes one query-planning call and one synthesis call. The tool planner receives the public query context and the synthesis step receives excerpts, which limits what either step can do.
 
-### Frontend integration
+## What Echo remembers
 
-The Next.js client uses a same-origin rewrite for FastAPI REST and SSE. The client keeps the selected session ID locally and loads its messages from the backend. It renders streamed fragments as a preview and uses the completion payload for the saved reply. After an interruption it can resend the same request ID. The inspector reads per-reply response fields from both the stream and stored history, and fetches saved memories separately.
-
-### Routing and the only tool
-
-Rules recognize general questions, freshness cues, contextual follow-ups, explicit recall, and comparison. For “Has anything changed?” immediately after research, the adjacent snapshot supplies the baseline. Explicit topic matches use ranked candidates; ties and stale conversational referents can use one structured, tool-free resolver call. The resolver can only select a supplied snapshot ID or, for current-fact follow-ups without research, suggest a short public subject grounded in a prior user question. If the system cannot establish a comparison baseline, it asks for clarification. Ordinary recall and personal plan questions do not search.
-
-A search turn gives the model exactly one strict function, `web_search(query, max_results)`, to formulate the public query. The application validates the name, argument types, length, result limit, and the number of calls. It rejects unsolicited tools and multiple calls in a reply. An empty result can trigger one distinct reformulation within the configured budget (at most two); a provider error ends search for the turn. Separate synthesis receives bounded excerpts keyed by application IDs, with no tools enabled. Context loading, caching, storage and comparison are internal services; the model cannot call a database, a browser, or a general HTTP client.
-
-## Memory and schema
-
-| Table | What it preserves |
+| Record | What it is for |
 | --- | --- |
-| `sessions` | Session UUID, browser or local owner, title, UTC creation time, and integer revision. Indexed by owner and time. |
-| `turns` | Two stable message UUIDs, ordered turn number, separate asked/answered times, user text, and the complete assistant response (sources, changes, evidence mode, and timings). Unique turn sequence and optional request ID per session. Owner is inherited from the session. |
-| `memories` | Explicit user quote in a typed slot (goal, preference, project, plan, commitment); observed/created UTC times, source user message ID, and supersession link. |
-| `snapshots` | Append-only research record linked to the assistant turn; original question, normalized topic, public query, UTC ask/retrieval/expiry, answer summary, claims, and provider excerpts. Indexed by owner, session, topic and time. |
+| `sessions` and `turns` | The question and answer as they appeared, separate UTC timestamps, citations, changes, trace metadata, and the order of completed turns. |
+| `memories` | Explicit details supplied by the user, such as a plan or preference. Each entry keeps the quoted span, typed key, source message, and observation and save times. |
+| `snapshots` | Research that can be recalled or compared later. A snapshot records the public query, retrieval and expiry times, source excerpts, and validated claims. |
 
-UTC conversion is explicit at the SQLAlchemy boundary, including after a SQLite round trip. Historical recall uses UTC dates for “last week” (the previous Monday–Sunday), “last month,” “yesterday,” and “N days ago.” With one matching saved turn, Echo quotes the requested speaker and the original timestamp. Citations from an archived assistant reply are marked historical. With several candidates, the model receives only the selected history and is told to report it as recall.
+These records answer different questions. “What did I ask last week?” needs the original message and date. “When is my interview?” needs the active plan. “Is the latest release still the same?” needs the previous evidence and a new observation.
 
-Retrieval combines the last few turns with FTS5 candidates and ranks them using topic term coverage, session locality for research, and recency. FTS5 tables and triggers are installed by an optional SQLite-only migration. Other configurations rank a capped recent set; they can miss older material. The agent also selects up to eight relevant active semantic memories. The model sees distinct fields for the user’s text, the assistant’s reply, and their timestamps. These are separate from external evidence.
+SQLite uses FTS5 when available, together with recent turns and topic matching. PostgreSQL and SQLite without FTS5 rank a bounded recent set. Historical queries resolve relative dates in UTC. Semantic retrieval selects up to eight active memories. When the user corrects a detail, the replacement must quote the new message and point to the active entry seen during retrieval. A conditional update and unique active slot prevent concurrent corrections from silently overwriting each other. The older entry remains available in the timeline.
 
-The answer schema can propose semantic memories on explicit self-reports. The server requires a verbatim span of the current user message and a normalized typed key. It will not overwrite a different active quote unless the draft points to the same active memory seen during retrieval. A unique active-slot constraint and conditional update protect concurrent writes; superseded rows and their source messages remain available. The extraction records what the user said; it neither verifies their plans nor infers personal attributes from web data.
+## Deciding what changed
 
-## Freshness, grounding, and changes
+For a follow-up immediately after research, the adjacent snapshot supplies the baseline. Other questions use ranked topic candidates and can ask for clarification when the subject remains ambiguous. A fresh recheck always goes back to Tavily. Implicit research can reuse an unexpired snapshot or a process-local cache entry. Default freshness windows range from 15 minutes for news and weather to 24 hours for general research. Cached excerpts retain their original retrieval time.
 
-Default TTLs are 15 minutes for news/weather, 1 hour for prices/markets, 6 hours for releases, and 24 hours for other research. All can be set in seconds in `.env`. An explicit current check, explicit search request, or comparison bypasses both the in-process LRU and durable snapshot reuse. Implicit research may reuse an unexpired snapshot for the same normalized standalone question or an LRU entry for the same owner, normalized tool query, result cap, and volatility. Cache hits retain their original retrieval time and cannot create a new live snapshot. Failures and empty batches are not cached. A provider call in the current turn does not guarantee that the underlying pages were fetched or published in the current turn.
+Echo accepts citations only from the returned HTTP(S) results. The draft supplies a source ID and an exact quote. The backend checks both, and uses the provider URL when rendering the answer. An extracted claim also needs its subject and value in the witness quote. Publication and retrieval times are shown separately. Retrieval time tells us when Echo saw the excerpt, while the publication date, when available, tells us when the source says it was published.
 
-The source pool maps short application IDs to Tavily results. Only HTTP(S) provider URLs are eligible. The draft selects exact quotations from those excerpts. Validation checks the ID and quotation, and the renderer uses the approved quote and provider URL rather than model-written web prose or links. Publication and retrieval times remain separate. For extracted facts, the literal subject and value must appear in the witness quote. This constrains attribution; it does not prove that the quote is authoritative, current, relevant, or semantically sufficient for the proposed attribute.
+For comparison, Echo groups claims by normalized subject and attribute, then compares the values within each group. The result can be changed, unchanged, new, unverified, conflicting, or insufficient. If a current source cannot establish a comparable value, Echo can still show the old observation and explain the gap. Quote matching constrains attribution. It cannot settle source credibility or prove that differently worded claims refer to the same scope and units.
 
-A structured claim holds `subject`, `attribute`, `value`, `observed_at`, `source_url`, witness quote, and an evidence status of `snippet_supported`. The model proposes keys and values and is asked to carry forward compatible keys only for the same entity, units and scope. The comparator groups by normalized subject and attribute and compares distinct normalized values. It reports changed, unchanged, new, now unverified, conflicting, or insufficient. A current conflict prevents a single-value conclusion. A missing current claim becomes unverified, and a lack of comparable keys becomes insufficient. The result and both sides' claim records are saved in the turn; old snapshots are never updated in place.
+## What the user can inspect
 
-## Speed and failure behavior
+The Next.js workspace gives the user a conversation sidebar, a central composer, and an Agent Inspector. A same-origin rewrite carries REST and SSE through the frontend domain. The composer keeps typing state local, and the transcript reconciles pending and saved replies by stable keys.
 
-Stable requests use one inference and no tool. A normal research turn uses one function call and one synthesis; only an ambiguous contextual turn or empty first result adds work. Both adapters reuse async HTTP clients. Context size, tool count, search results, model output, and timeout budgets are bounded. Logs contain a trace ID, state, outcome, total elapsed time, memory/search/model timings, provider and cache counts, and token usage when reported. The response duration is measured before the commit; logs include the commit. No text, snippets, API keys, or request bodies are written to Echo logs.
+The Inspector distinguishes a live search from a cache hit, reports whether context was used, and shows response time, search calls, cited excerpts, and the trace ID. Comparison cards keep earlier and current claims side by side. Saved memory has its own timeline because the API reports context usage at the reply level and does not provide a record-by-record citation for memory.
 
-| Condition | Behavior |
-| --- | --- |
-| Missing model key, refusal, invalid structured reply, or model deadline | Sanitized 503 for turns requiring inference; no turn stored. |
-| Tavily outage, timeout, empty results, or unsupported citations | The current check is inconclusive. A previous snapshot remains historical. |
-| Overall turn deadline | Sanitized 504 before a response. Use the same request ID to check whether commit already succeeded. |
-| Storage failure, malformed input, or unknown session | Sanitized 503, 422, or 404 respectively. |
-| Concurrent same-session turn or idempotency conflict | A completed replay returns the original result; conflicting writes return 409. |
+## Where Echo fails and how I check it
 
-## Security and limits
+A missing model key, provider failure, or unusable structured reply produces a sanitized error. Failed or empty searches and unsupported excerpts produce an inconclusive current result. A network interruption lets the composer offer a retry with the same request ID. The overall deadline bounds a turn. Echo logs trace IDs, phase timings, search counts, and outcomes so I can investigate failures without logging prompts, excerpts, or credentials.
 
-Local mode uses a single identity and should bind to loopback. Public demo mode requires PostgreSQL and a server-side signing secret. A signed, host-scoped, HTTP-only cookie identifies each browser. Session ownership and memory lookup use that identity, and identity-scoped responses disallow caching. The Next.js rewrite forwards the cookie and response through the frontend origin. Direct cross-origin calls are restricted by the configured CORS origin. This is anonymous isolation. There is no account recovery, rate limiting, deletion flow, or application-level encryption policy.
+Backend tests use a fixed clock, scripted providers, and real migrations. They cover routing, historical recall, corrections, conflicting evidence, ownership, concurrent writes, restart persistence, and SSE completion. The fixture suite in `evals/cases.json` checks outcomes and counts provider calls. Its timing measures the local path. Frontend tests cover API parsing and streaming, and browser checks exercise the composer, history, source disclosures, Inspector, and responsive layout. The live provider checks and their limits are recorded in [VERIFICATION.md](VERIFICATION.md).
 
-Queries use SQLAlchemy binding, including SQLite FTS search terms derived locally. The OpenAI call is made with `store=false`, which is not a guarantee about provider retention. The model receives the current request and bounded context. The tool planner never sees source snippets or semantic memory, and grounded synthesis has no tools. Snippets are treated as untrusted text. These controls reduce injection exposure but do not make model judgment or returned web content trustworthy. The app does not fetch cited pages. The frontend renders excerpts as text and filters links by scheme.
+## Tradeoffs and next steps
 
-The routing rules are English-focused and can miss current facts phrased indirectly. Structured extraction can miss changes, conflate units, or choose irrelevant excerpts. Related wording can fragment topic keys, and identical values cannot prove continuity between checks. There is no source credibility model or article-level entailment verification. The cache is process-local, a retry can repeat external calls before a turn commits, and SQLite permits only one writer at a time. PostgreSQL uses the same relational schema and query fallback; see the verification notes for what was exercised. SSE streams progress and validated fragments; this delays the first answer fragment compared with raw model token streaming.
+I chose an explicit state machine so a test can tell whether a question searched, which baseline it used, and what got stored. An open-ended tool loop would make the call budget harder to predict. I kept lexical retrieval and snippet evidence because they are easy to inspect end to end. The cost is weaker recall for old or loosely related messages, and weaker grounding when the useful context lives outside a snippet.
 
-## Tradeoffs, evaluation, and next steps
+The public demo uses a signed browser cookie and PostgreSQL. Clearing the cookie loses access to that browser’s history. Account recovery, deletion controls, and application-level rate limiting remain open. Provider quotas, cold starts, and the bounded PostgreSQL retrieval path affect the demo. The free Render database has a finite retention window.
 
-Explicit orchestration makes the routing and comparison policy reviewable and lets tests assert calls, evidence labels, and timestamps without a provider. A free-form tool loop would be more flexible but could spend an unpredictable number of requests. Embeddings could improve recall, but indexed lexical candidates and conversation-aware resolution are easier to audit for the initial corpus. Exact excerpts are less polished than unrestricted synthesis, but they constrain the evidence presented to the user and make citation checks mechanical. Full-page fetching would exceed the single-tool surface.
-
-Tests use a fixed clock, scripted model/search responses, and actual database migrations. They exercise general answers, provider contracts, recall, corrections, freshness, conflicting claims, errors, concurrency, persistence across restarts, and SSE completion. The eight cases in `evals/cases.json` specify behavioral expectations; the runner measures actual local HTTP turn latency and tool and provider usage. These fixtures evaluate policy and plumbing, not live search quality or model factual accuracy.
-
-Next, collect labeled temporal examples for routing and comparison errors. Then add a PostgreSQL search index or embeddings behind the existing candidate interface, better entity and unit normalization, source quality checks within the existing tool, real-provider regression runs, and account authentication with deletion and retention controls.
-
-Echo can send model requests to Groq or OpenAI using the same SDK. Groq hosts the default GPT-OSS model. It receives a local tool request for search planning and a separate structured output request for synthesis. Tavily remains responsible for search. [Groq API compatibility](https://console.groq.com/docs/openai) · [Groq Structured Outputs](https://console.groq.com/docs/structured-outputs) · [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=chat) · [Tavily Search API](https://docs.tavily.com/documentation/api-reference/endpoint/search)
-
+I would start the next pass with a labeled set of real temporal follow-ups and provider failures. That would give me a way to compare retrieval changes before adding an index or embeddings. I would also tighten entity and unit matching, surface why a comparison lacks evidence, and add account-based access and retention controls before broader use.
