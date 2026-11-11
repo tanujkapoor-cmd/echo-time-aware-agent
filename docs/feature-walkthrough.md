@@ -20,3 +20,13 @@ flowchart LR
 | Say “My interview is on Friday.” Then say “Actually, my interview was moved to Monday.” Start a new chat and ask “What is my interview plan?” | When the model extracts the two statements, the reply can recall Monday. **Saved memory** shows the active entry and the superseded one. |
 
 For a repeatable conflict check, run `python -m pytest -q tests/test_api.py -k recheck` from the repository root. The fixtures cover an omitted competing source and a recheck that picks a different quote from an earlier listing. [Technical design](../design.md)
+
+## Live demo screenshots
+
+Echo answers a current question with a citation. The Inspector shows that it searched the web and when it retrieved the source.
+
+![Echo answering a Python release question with a python.org citation and search activity in the Inspector](echo-search-inspector.jpg)
+
+On the follow-up, Echo uses the earlier check as a baseline and searches again. In this run, the Inspector shows the baseline time and an **Unable to verify** verdict.
+
+![Echo's follow-up showing Context used, a fresh citation, and an Unable to verify comparison in the Inspector](echo-temporal-comparison.jpg)

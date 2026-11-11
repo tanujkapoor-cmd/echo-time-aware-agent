@@ -8,7 +8,7 @@ Echo was built for the minimi engineering challenge. When a user asks whether an
 
 *The running Echo app with a fixture conversation in the sidebar.*
 
-[Live demo](https://echo-time-aware-agent.vercel.app/) · [Feature walkthrough](docs/feature-walkthrough.md) · [Technical design](design.md) · [Verification and evaluation](VERIFICATION.md)
+[Live demo](https://echo-time-aware-agent.vercel.app/) · [Feature walkthrough and screenshots](docs/feature-walkthrough.md) · [Technical design](design.md) · [Verification and evaluation](VERIFICATION.md)
 
 ## What Echo does
 
