@@ -8,7 +8,7 @@ Echo was built for the minimi engineering challenge. When a user asks whether an
 
 *The running Echo app with a fixture conversation in the sidebar.*
 
-[Technical design](design.md) · [Verification and evaluation](VERIFICATION.md)
+[Live demo](https://echo-time-aware-agent.vercel.app/) · [Technical design](design.md) · [Verification and evaluation](VERIFICATION.md)
 
 ## What Echo does
 
@@ -103,6 +103,8 @@ npm run build
 Backend tests use real migrations and controlled model and search responses. They exercise persistence, routing, citation validation, temporal comparison, memory correction, and SSE. The evaluation runner reports passed scenarios, provider and tool calls, and measured p50 and p95 local HTTP latency. Fixture latency excludes real provider network and inference time. [Verification details](VERIFICATION.md)
 
 ## Deployment
+
+[Open Echo on Vercel](https://echo-time-aware-agent.vercel.app/) or check the [Render API health endpoint](https://echo-time-aware-api-gb19.onrender.com/api/v1/health).
 
 The deployment pairs a Vercel Next.js project rooted at `frontend/` with a Render FastAPI service and managed PostgreSQL. The [Render Blueprint](render.yaml) wires the database connection into FastAPI, runs Alembic before Uvicorn, and configures the health endpoint. Use the deployed backend origin for the Vercel rewrite and the frontend origin for backend CORS. Each browser receives a signed, secure cookie so its saved sessions and memory are isolated from other visitors.
 

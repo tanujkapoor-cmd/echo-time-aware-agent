@@ -20,6 +20,8 @@ Local smoke tests used real Groq and Tavily calls and an isolated database. Groq
 
 The deployed Render API passed its health check and returned a live answer with two Tavily citations after the provider configuration was updated.
 
+The public Vercel deployment passed the same-origin health check. A question submitted in the browser streamed a Groq reply with two Tavily citations. Both sources appeared in the Inspector, and the saved conversation reloaded successfully. The Render CORS preflight accepted the production Vercel origin.
+
 ## Evaluation method
 
 Run `python -m evals.run` from the repository root. The runner exercises HTTP turns against real migrated storage with a fixed clock and deterministic provider responses. It checks policy and evidence outcomes, counts model-directed search calls and provider requests, and measures p50 and p95 turn latency. Those timings describe the local fixture path and exclude live provider latency. Live search results and model outputs can vary between runs.
