@@ -46,7 +46,7 @@ For a follow-up immediately after research, the adjacent snapshot supplies the b
 
 Echo accepts citations only from the returned HTTP(S) results. The draft supplies a source ID and an exact quote. The backend checks both, and uses the provider URL when rendering the answer. An extracted claim also needs its subject and value in the witness quote. Publication and retrieval times are shown separately. Retrieval time tells us when Echo saw the excerpt, while the publication date, when available, tells us when the source says it was published.
 
-For comparison, Echo groups claims by normalized subject and attribute, then compares the values within each group. The result can be changed, unchanged, new, unverified, conflicting, or insufficient. If a current source cannot establish a comparable value, Echo can still show the old observation and explain the gap. Quote matching constrains attribution. It cannot settle source credibility or prove that differently worded claims refer to the same scope and units.
+For comparison, Echo groups claims by normalized subject and attribute, then compares the values within each group. When extraction proposes a different value, Echo also checks whether a current result repeats the earlier quote verbatim. A repeated competing quote is cited as conflicting evidence. If the same source already contained the proposed new quote at the baseline, it takes fresh supporting evidence to call a change. Quote matching constrains attribution. It cannot settle source credibility or prove that differently worded claims refer to the same scope and units.
 
 ## What the user can inspect
 
