@@ -1,4 +1,4 @@
-import { ApiError, isCitation, isReply, post, record, request, sendMessage } from "./api.ts";
+import { ApiError, chatPost, isCitation, isReply, record, request, sendMessage } from "./api.ts";
 import type { ChatReply, ChatRequest, Citation } from "./types";
 
 export interface StreamUpdates {
@@ -52,7 +52,7 @@ export async function streamMessage(
 ): Promise<ChatReply> {
   let response: Response;
   try {
-    response = await request("/chat/stream", post(body, signal));
+    response = await request("/chat/stream", chatPost(body, signal));
   } catch (error) {
     if (error instanceof ApiError && !error.code && [404, 405, 501].includes(error.status ?? 0)) {
       return sendMessage(body, signal);

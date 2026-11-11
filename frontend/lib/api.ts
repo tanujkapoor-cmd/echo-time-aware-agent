@@ -53,6 +53,13 @@ export function post(body: object, signal?: AbortSignal): RequestInit {
   };
 }
 
+export function chatPost(body: ChatRequest, signal?: AbortSignal): RequestInit {
+  const options = post(body, signal);
+  const headers = new Headers(options.headers);
+  headers.set("X-Echo-Timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
+  return { ...options, headers };
+}
+
 async function json(response: Response): Promise<unknown> {
   return response.json().catch(() => {
     throw new ApiError("Echo returned an empty or unreadable response.");
@@ -136,7 +143,7 @@ export async function listMessages(id: string, signal?: AbortSignal): Promise<Me
 }
 
 export async function sendMessage(body: ChatRequest, signal?: AbortSignal): Promise<ChatReply> {
-  const data = await json(await request("/chat", post(body, signal)));
+  const data = await json(await request("/chat", chatPost(body, signal)));
   if (!isReply(data)) throw new ApiError("Echo returned an empty or invalid answer.");
   return data;
 }

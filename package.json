@@ -1,0 +1,32 @@
+{
+  "name": "echo-time-aware-agent",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.18.0" },
+  "workspaces": ["frontend"],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "start:api": "node --env-file-if-exists=.env server/index.ts",
+    "build": "npm run typecheck:api && npm run build --workspace echo-frontend",
+    "typecheck:api": "tsc -p server/tsconfig.json",
+    "typecheck": "npm run typecheck:api && npm run typecheck --workspace echo-frontend",
+    "lint": "npm run lint --workspace echo-frontend -- --max-warnings 0",
+    "test:api": "node --test server/tests/*.test.ts",
+    "test": "npm run test:api && npm run test --workspace echo-frontend",
+    "eval": "node --test --test-reporter=spec server/tests/minimi.test.ts",
+    "eval:live": "node --env-file-if-exists=.env server/eval-live.ts"
+  },
+  "dependencies": {
+    "@js-temporal/polyfill": "^0.5.1",
+    "fastify": "^5.6.0",
+    "pg": "^8.16.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "@types/pg": "^8.15.0",
+    "concurrently": "^9.2.0",
+    "typescript": "^5.9.0"
+  }
+}
