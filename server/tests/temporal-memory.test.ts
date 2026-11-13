@@ -3,7 +3,7 @@ import test from "node:test";
 import { databaseFile, draft, harness, hit, plan, price, send, session } from "./harness.ts";
 
 // These are controlled historical fixtures. Product names and domains are real. Prices, dates and release text are test data.
-test("A: the Monday CRM shortlist survives a restart and gets a scoped five-product recheck", async () => {
+test("a vendor shortlist survives a restart and retains pricing scope during a recheck", async () => {
   const fixture = harness("2026-11-02T17:00:00Z");
   const db = await databaseFile();
   const initial = [
@@ -14,7 +14,7 @@ test("A: the Monday CRM shortlist survives a restart and gets a scoped five-prod
     price("Freshsales", "Growth", 15, "https://www.freshworks.com/crm/sales/pricing/", "seat"),
   ];
   const products = initial.map(entry => entry.subject);
-  const team = "On Monday we shortlisted 5 CRM tools for a 20-person sales team.";
+  const team = "On Monday we picked five CRM options for our sales team of 20.";
   const setup = team + " Search the web for the monthly prices of " + products.join(", ") + ".";
   const previousQueries = ["HubSpot Salesforce Pipedrive official CRM pricing", "Zoho CRM Freshsales official pricing"];
   fixture.plans.push(plan(previousQueries[0], previousQueries[1]));
@@ -50,7 +50,7 @@ test("A: the Monday CRM shortlist survives a restart and gets a scoped five-prod
     fixture.results.push(draft([...current.slice(0, 3), update, ...current.slice(3), conflict]));
 
     const followup = await session(app);
-    const reply = await send(app, followup.id, "Has any of them changed pricing or shipped something big since?", "America/New_York");
+    const reply = await send(app, followup.id, "Has anything changed since we last checked?", "America/New_York");
     assert.equal(reply.baseline_at, old.timestamp);
     assert.equal(reply.memory_used, true);
     assert.deepEqual(fixture.calls.search.slice(-2), nextQueries);
@@ -68,7 +68,7 @@ test("A: the Monday CRM shortlist survives a restart and gets a scoped five-prod
   } finally { await app.close(); }
 });
 
-test("B: an exact local November 3 query finds the actual earlier turn across sessions and restart", async () => {
+test("an explicit date finds the earlier turn in the user's timezone after restart", async () => {
   const fixture = harness("2026-11-04T06:40:00Z"); // Nov 3, 22:40 in Los Angeles.
   const db = await databaseFile();
   const version = { subject: "Python", attribute: "stable version", value: "3.14.2",
@@ -90,7 +90,7 @@ test("B: an exact local November 3 query finds the actual earlier turn across se
   try {
     const current = await session(app);
     fixture.results.push(draft([version]));
-    const reply = await send(app, current.id, "What did I ask you on 3 November? Is your answer still correct today?", "America/Los_Angeles");
+    const reply = await send(app, current.id, "What did I ask on November 3? Is that answer still accurate?", "America/Los_Angeles");
     assert.match(reply.answer, /3 Nov 2026/);
     assert(reply.answer.includes(question));
     assert.match(reply.answer, /I replied:/);
@@ -105,7 +105,7 @@ test("B: an exact local November 3 query finds the actual earlier turn across se
   } finally { await app.close(); }
 });
 
-test("C: last Tuesday selects the PostgreSQL discussion and compares only matching prices", async () => {
+test("a relative weekday retrieves the hosting discussion and compares matching plans", async () => {
   const fixture = harness("2026-11-10T23:45:00Z");
   const db = await databaseFile();
   const first = [
@@ -132,7 +132,7 @@ test("C: last Tuesday selects the PostgreSQL discussion and compares only matchi
     fixture.plans.push(plan(oldQuery));
     fixture.searches.set(oldQuery, current.map(entry => entry.source));
     fixture.results.push(draft(current));
-    const reply = await send(app, other.id, "Last Tuesday I asked you about Postgres hosting. Has any pricing changed since then?", "America/New_York");
+    const reply = await send(app, other.id, "Recheck the Postgres hosting prices from last Tuesday. Has anything changed?", "America/New_York");
     assert.equal(reply.baseline_at, original.timestamp);
     assert.match(reply.answer, /10 Nov 2026/);
     assert.match(reply.answer, /Render Basic .* changed from 19 to 22/);

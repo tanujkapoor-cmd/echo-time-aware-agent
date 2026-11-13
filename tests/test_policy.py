@@ -12,7 +12,7 @@ from echo.llm import ChatCompletionsModel
 from echo.routing import Route, decide, historical_window
 from echo.schemas import ChangeKind
 from echo.search import Freshness, SearchCache, TavilySearch
-from evals.fakes import release
+from tests.fakes import release
 
 
 @pytest.mark.parametrize(

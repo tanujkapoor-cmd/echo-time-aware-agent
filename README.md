@@ -2,11 +2,11 @@
 
 **A time-aware AI chat agent that remembers your questions and checks what has changed.**
 
-[Hosted preview](https://echo-time-aware-agent.vercel.app/) · [Feature walkthrough](docs/feature-walkthrough.md) · [Technical design](DESIGN.md) · [Minimi evaluation](docs/MINIMI_EVALUATION_REPORT.md)
+[Hosted preview](https://echo-time-aware-agent.vercel.app/) · [Feature walkthrough](docs/feature-walkthrough.md) · [Technical design](DESIGN.md)
 
 ## Overview
 
-Echo was built for the minimi engineering challenge. Ask a question, follow up without repeating the setup, or come back later to check whether an earlier answer still holds. Echo keeps conversation history and dated research so you can see what it checked and when.
+Ask a question, follow up without repeating the setup, or come back later to check whether an earlier answer still holds. Echo keeps conversation history and dated research so you can see what it checked and when.
 
 ## Key features
 
@@ -105,24 +105,21 @@ Keep provider keys and signing credentials in the backend environment. Next.js f
 2. Start a new chat in the same browser and ask “What is my interview plan?” Open **Agent Inspector → Saved memory** to see the active plan and the superseded record when Echo extracted the correction.
 3. Ask “What is the latest stable Python release? Cite python.org.” Then ask “Has anything changed since I last asked?” Inspect the recheck to see the earlier retrieval time and new evidence. The verdict depends on the sources available when you try it.
 
-## Test and evaluate
+## Development checks
 
 ~~~bash
 npm test
-npm run eval
 npm run lint
 npm run build
 npm run typecheck
 ~~~
 
-The fixture evaluation covers the Monday CRM shortlist, the 3 November recall, and the last-Tuesday PostgreSQL hosting recheck. With a running app and provider keys, `npm run eval:live` measures response latency and call counts over real API requests. Set `ECHO_EVAL_PAUSE_MS` to space requests for a provider with a small quota. [Evaluation and limitations](docs/MINIMI_EVALUATION_REPORT.md)
-
 ## Deployment
 
-The [Render Blueprint](render.yaml) runs the Node.js API and connects PostgreSQL. Set `NEXT_PUBLIC_API_BASE_URL` in the Vercel frontend project to the deployed API origin. The hosted API requires a signing secret and uses a signed, secure cookie to isolate browser histories. See the evaluation report for the status of the existing live demo.
+The [Render Blueprint](render.yaml) configures the Node.js API and PostgreSQL. Set `NEXT_PUBLIC_API_BASE_URL` in the Vercel frontend project to the deployed API origin. The hosted API requires a signing secret and uses a signed, secure cookie to isolate browser histories.
 
 ## Limitations and next steps
 
 The public demo uses anonymous browser identity, so clearing cookies or switching browsers loses access to that history. Topic lookup and model context are bounded. Routing is primarily English, and search coverage depends on Tavily. A matching excerpt establishes what a source said. Confirming a change also depends on comparable evidence being available.
 
-Future work includes account authentication, retention controls, stronger source ranking, and a labeled live evaluation set. [Design tradeoffs](DESIGN.md)
+Future work includes account authentication, retention controls, and stronger source ranking. [Design tradeoffs](DESIGN.md)

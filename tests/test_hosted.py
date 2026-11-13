@@ -5,7 +5,7 @@ from pydantic import SecretStr
 from echo.db import database_url
 from echo.identity import COOKIE
 from echo.main import create_app
-from evals.fakes import FakeModel, draft, interview
+from tests.fakes import FakeModel, draft, interview
 
 from .conftest import send, session
 

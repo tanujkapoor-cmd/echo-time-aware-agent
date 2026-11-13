@@ -19,8 +19,6 @@ flowchart LR
 | In that chat, ask “Has anything changed since I last asked?” | The previous snapshot and current evidence. A recheck can report agreement, a change, conflict, or insufficient evidence. It depends on the sources. |
 | Say “My interview is on Friday.” Then say “Actually, my interview was moved to Monday.” Start a new chat and ask “What is my interview plan?” | When the model extracts the two statements, the reply can recall Monday. **Saved memory** shows the active entry and the superseded one. |
 
-Run `npm run eval` from the repository root to repeat the three hiring-challenge scenarios with controlled sources and dates. [Technical design](../DESIGN.md)
-
 ## Live demo screenshots
 
 Echo cites python.org for the release check. When asked what changed, it looks up the earlier check and searches again. In this run, Echo surfaced the new citation and the earlier timestamp, and reported that it couldn’t verify a change.

@@ -9,7 +9,7 @@ from sqlalchemy import select
 from echo.db import Snapshot
 from echo.evidence import Witness
 from echo.llm import ToolCall
-from evals.fakes import FakeModel, FakeSearch, draft, interview, release, release_draft, tool
+from tests.fakes import FakeModel, FakeSearch, draft, interview, release, release_draft, tool
 
 from .conftest import app_for, client_for, send, session
 

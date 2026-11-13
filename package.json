@@ -13,9 +13,7 @@
     "typecheck": "npm run typecheck:api && npm run typecheck --workspace echo-frontend",
     "lint": "npm run lint --workspace echo-frontend -- --max-warnings 0",
     "test:api": "node --test server/tests/*.test.ts",
-    "test": "npm run test:api && npm run test --workspace echo-frontend",
-    "eval": "node --test --test-reporter=spec server/tests/minimi.test.ts",
-    "eval:live": "node --env-file-if-exists=.env server/eval-live.ts"
+    "test": "npm run test:api && npm run test --workspace echo-frontend"
   },
   "dependencies": {
     "@js-temporal/polyfill": "^0.5.1",

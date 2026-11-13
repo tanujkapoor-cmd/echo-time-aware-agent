@@ -8,7 +8,7 @@ from echo.db import Session, Turn
 from echo.evidence import Witness
 from echo.llm import Resolution
 from echo.main import demo_identity
-from evals.fakes import FakeModel, FakeSearch, draft, release, release_draft, tool
+from tests.fakes import FakeModel, FakeSearch, draft, release, release_draft, tool
 
 from .conftest import app_for, client_for, send, session
 

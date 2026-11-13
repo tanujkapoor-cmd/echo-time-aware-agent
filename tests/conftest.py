@@ -8,7 +8,7 @@ from httpx import ASGITransport, AsyncClient
 from alembic import command
 from echo.config import Settings
 from echo.main import create_app
-from evals.fakes import Clock
+from tests.fakes import Clock
 
 ROOT = Path(__file__).resolve().parents[1]
 

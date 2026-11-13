@@ -19,4 +19,4 @@ flowchart LR
 
 **Tradeoffs.** I ruled out always searching because it adds a network call to simple turns. I also ruled out an open-ended tool loop so the server can enforce a small budget and check evidence before replying. SQLite keeps local setup to npm and an env file, while PostgreSQL supports hosted storage using the same tables. Exact excerpts and conservative matching can leave a real change unconfirmed when a source omits important details.
 
-**With another week.** I’d add vendor-specific price normalization, stronger source ranking, and a labeled live evaluation set. I’d also index cross-session topic retrieval as histories grow.
+**Next steps.** Normalize vendor pricing more reliably, rank primary sources higher, and index cross-session topic lookup for larger histories.
